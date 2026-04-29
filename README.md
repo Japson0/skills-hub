@@ -1,1 +1,1 @@
-(快速开发框架SKILLS)[../fastdev-doc-driven-backend/README.md] :这个 skill 面向 FastDev 风格的 Spring 后端项目。
+[快速开发框架SKILLS](../fastdev-doc-driven-backend/README.md) — 这个 skill 面向 FastDev 风格的 Spring 后端项目。
