@@ -1,0 +1,47 @@
+{
+  "skill_name": "fastdev-doc-driven-backend",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "根据表 agi_agent_charging 生成单表 CRUD。请先根据表结构识别枚举字段并生成继承 ComEnum<Integer> 的枚举类，类名尽量去掉统一前缀后再命名，同时包路径直接沿用当前工程结构。",
+      "expected_output": "会先要求或使用表结构，优先生成枚举类，并按现有工程包路径输出符合命名规范的 Entity、DTO、Query、Req、Mapper、Service、Controller。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "这个模块继承 BaseController4DTO 和 BaseService4DTO。简单增删改查不要重复生成，只额外补一个自定义分页查询接口。",
+      "expected_output": "会复用基础 Controller 和基础 Service，不重复生成基础 CRUD，只补自定义分页相关扩展代码。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "请按现有 FastDev 样例补一个自定义分页查询，Mapper 方法签名沿用 IPage page + QueryWrapper<Entity> wrapper，XML 里通过 ${ew.customSqlSegment} 拼接条件，Query 对象优先使用 @QueryField 和 Operation 表达查询条件。",
+      "expected_output": "会生成与现有样例一致的自定义分页链路，包括 IPage<DTO> 的 Mapper 方法、PageWrapper 的 ServiceImpl 调用方式、带 @QueryField 的 Query 对象，以及在 XML 中使用 ${ew.customSqlSegment} 的 SQL。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "参考现有后端规范，新增一个用户更新接口的请求对象和 Controller 参数校验。名称字段只允许中文、英文字母、数字和下划线，手机号需要做手机号格式校验，邮箱使用标准邮箱校验，更新接口要走 Update 分组校验。请按项目习惯生成代码。",
+      "expected_output": "能够正确生成请求对象字段校验，优先使用内置注解如 GeneralWithChinese、Phone，以及 @Validated(Update.class) 的 Controller 写法。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "请按现有框架规范设计一个实体，包含 password、phone、is_delete 字段。password 需要摘要加密存储，phone 需要可逆加密，is_delete 按逻辑删除字段映射。",
+      "expected_output": "会让实体实现 CryptAble，对 password 使用 @Encrypt(EncryptType.SM3)，对 phone 使用 @Encrypt(EncryptType.SM4)，并把 is_delete 映射成 boolean delete + @TableLogic。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "新增一个获取当前登录用户信息的接口，并按现有规范返回结果和抛出异常：默认走 RestResult 和预置 i18n；异常默认使用 BusinessException；如果用户明确说不需要 i18n，再改用 RestResponse 或 CommonException。",
+      "expected_output": "会优先使用 UserContext 获取当前用户信息，默认使用 RestResult 返回、BusinessException 抛错，并只在用户明确不要 i18n 时切换到 RestResponse 或 CommonException。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "帮我从零创建一个 FastDev 风格的 Spring Cloud 项目，优先使用你们现有的标准初始化方式，不要手工搭基础目录。",
+      "expected_output": "会优先使用固定的 Maven archetype 命令初始化项目，而不是手工拼装基础工程。",
+      "files": []
+    }
+  ]
+}
