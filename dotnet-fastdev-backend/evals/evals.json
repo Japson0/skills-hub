@@ -1,0 +1,111 @@
+[
+  {
+    "prompt": "帮我创建一个基于 Newland.Furion.SqlSugar.Template 的 .NET 项目，项目名称叫 MyProject",
+    "expected_actions": [
+      "建议使用模板命令初始化",
+      "提供模板安装方法",
+      "提供创建项目命令：dotnet new nl-furion-sqlsugar -n MyProject"
+    ]
+  },
+  {
+    "prompt": "根据这张 user_info 表生成完整的 CRUD 模块，表结构包含：id, name, phone_number, email, status, create_time, update_time",
+    "expected_actions": [
+      "生成 Entity 类 UserInfo 继承 DBEntityBase",
+      "生成 Service 接口 IUserInfoService 和实现 UserInfoService",
+      "生成 Controller UserInfoController 实现 IDynamicApiController",
+      "生成 Input 类 CreateInput、UpdateInput",
+      "生成 DTO 类 UserInfoDto",
+      "使用 SqlSugarRepository 或 SqlSugarHelper 实现增删改查"
+    ]
+  },
+  {
+    "prompt": "在现有 MyProject 项目中新增一个订单管理模块，需要实现创建订单、查询订单列表、更新订单状态、删除订单功能",
+    "expected_actions": [
+      "创建 Entity 类 Order 继承 DBEntityBase",
+      "创建 Service 接口 IOrderService 和实现 OrderService",
+      "创建 Controller OrderController 实现 IDynamicApiController",
+      "创建 Input 类 CreateOrderInput、UpdateOrderInput",
+      "实现分页查询方法",
+      "使用业务异常验证订单存在性"
+    ]
+  },
+  {
+    "prompt": "这个用户注册接口需要验证手机号格式、密码长度至少6位、姓名不能为空",
+    "expected_actions": [
+      "在 RegisterInput 中添加 [DataValidation(DataValidationTypeEnum.PhoneNumberValidate), Required]",
+      "添加 [MinLength(6), MaxLength(32), Required] 用于密码",
+      "添加 [Required] 用于姓名",
+      "在 Service 中验证手机号唯一性"
+    ]
+  },
+  {
+    "prompt": "帮我实现一个分页查询接口，可以按名称模糊查询、按状态精确查询、按创建时间范围查询",
+    "expected_actions": [
+      "创建分页查询方法 GetPage",
+      "使用 SqlSugarHelper.Queryable<T>() 构建查询",
+      "使用 Where 方法添加条件",
+      "使用 ToPageListAsync 实现分页",
+      "返回 PageResult<T> 或自定义分页结果"
+    ]
+  },
+  {
+    "prompt": "这个接口需要匿名访问，不需要 JWT 认证",
+    "expected_actions": [
+      "在 Controller 方法上添加 [AllowAnonymous] 特性",
+      "确保方法可以被未登录用户访问"
+    ]
+  },
+  {
+    "prompt": "如何在 Service 中获取当前登录用户的 ID 和手机号？",
+    "expected_actions": [
+      "使用 AppUser.UserId 获取用户 ID",
+      "使用 AppUser.PhoneNumber 获取手机号",
+      "说明 AppUser 是静态类，直接调用即可"
+    ]
+  },
+  {
+    "prompt": "用户密码需要加密存储，如何处理？",
+    "expected_actions": [
+      "使用 MD5Encryption.Encrypt() 加密密码",
+      "在 Service 中加密后再存储",
+      "示例：user.Password = MD5Encryption.Encrypt(input.Password)"
+    ]
+  },
+  {
+    "prompt": "根据现有 UserController 样例，帮我生成一个 ProductController，包含增删改查功能",
+    "expected_actions": [
+      "实现 IDynamicApiController",
+      "使用 [ApiDescriptionSettings] 配置 Swagger",
+      "使用 primary constructor 注入 IProductService",
+      "参考样例的方法命名和参数命名",
+      "生成对应的 Service 和 Entity"
+    ]
+  },
+  {
+    "prompt": "表名是 sys_config，如何命名 Entity 和 Controller？",
+    "expected_actions": [
+      "Entity 类名：SysConfig",
+      "Controller 类名：SysConfigController",
+      "Service 接口：ISysConfigService",
+      "Service 实现：SysConfigService",
+      "说明 sys_ 前缀保留用于系统模块"
+    ]
+  },
+  {
+    "prompt": "如何在 Service 中抛出业务异常？",
+    "expected_actions": [
+      "使用 throw Oops.Bah(\"message\")",
+      "示例：throw Oops.Bah(\"该用户不存在\")",
+      "框架会自动转换为统一的错误响应"
+    ]
+  },
+  {
+    "prompt": "表中有 status 字段，取值是 0 和 1，需要生成枚举类",
+    "expected_actions": [
+      "创建枚举类 StatusEnum",
+      "放在 Core/Enum 目录",
+      "定义枚举值：Active = 1, Inactive = 0",
+      "在 Entity 中使用枚举类型或 int 类型"
+    ]
+  }
+]
