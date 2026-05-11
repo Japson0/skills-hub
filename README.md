@@ -10,5 +10,4 @@
 | [fastdev-doc-driven-backend](./fastdev-doc-driven-backend/README.md) | FastDev 风格 Spring 后端项目开发 | 根据开发文档生成 Controller、Service、Mapper/XML、Entity、DTO、Query 等代码 |
 | [dotnet-fastdev-backend](./dotnet-fastdev-backend/README.md) | .NET Furion + SqlSugar 后端快速开发 | 创建实体、服务、控制器、DTO、CRUD 操作、分页、验证等 |
 | [git-commit](./git-commit/SKILL.md) | Git 提交规范工具 | 执行符合 Conventional Commits 规范的语义化提交 |
-
-
+| [openapi-codegen](./openapi-codegen/SKILL.md) | OpenAPI 接口代码生成 | 根据OpenAPI文档规范生成带类型的api接口函数和类型 |
