@@ -1,57 +1,79 @@
 ---
 name: gitlab-java-kaniko-ci
-description: Generate or update GitLab CI pipelines specifically for Java Maven services, including single-module and multi-module Java projects that build JAR artifacts, publish Docker images with Kaniko, and deploy to Kubernetes with kubectl. Use this skill whenever the user asks to create .gitlab-ci.yml for a Java/Maven project, adapt this project's GitLab pipeline to another Java project, add Java service module CI jobs, or troubleshoot a similar Maven + Kaniko + Kubernetes GitLab CI setup.
+description: Generate a .gitlab-ci.yml for an existing project by inspecting its language, build tool, Dockerfile, deployment style, and branch policy. Use when the user says they have a project and want to generate GitLab CI, gitlab-ci.yml, or gitlab-cli.yml; supports general project analysis and includes this repository's Java Maven + Kaniko + kubectl pipeline as a reference template when applicable.
 license: MIT
-compatibility: Requires GitLab CI. Optimized for Maven wrapper projects, Kaniko image builds, and Kubernetes deployment by kubectl.
+compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.0"
+  version: "1.1"
 ---
 
-Create a reusable GitLab CI configuration for Java projects, modeled after this repository's `.gitlab-ci.yml`.
+Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline.
 
-The reference pipeline is designed for Java services built by Maven. It supports both single-module Java services and Maven multi-module Java services where each deployable module is packaged as a JAR, copied into `build/temp/`, built into a Docker image by Kaniko using `build/Dockerfile`, then deployed by updating a Kubernetes Deployment container image.
+Treat `gitlab-cli.yml` in user prompts as likely meaning GitLab CI config. The actual file name should normally be `.gitlab-ci.yml` unless the user explicitly says otherwise.
 
-## When To Use
+This skill is general-purpose. Do not blindly copy this repository's pipeline. Use the Java Maven + Kaniko + kubectl template only when the target project matches that shape or the user explicitly asks to reuse this project's template.
 
-Use this skill when the target project has most of these traits:
+## Workflow
 
-- GitLab CI is the CI/CD platform.
-- Java services are built with Maven or Maven Wrapper and produce JAR artifacts.
-- The project may contain multiple deployable Maven modules.
-- Docker images should be built inside CI without Docker-in-Docker, using Kaniko.
-- Deployment is done by `kubectl set image` and `kubectl rollout status`.
-- CI should run only on selected branches and only when relevant files change.
+1. Inspect the target project.
+2. Identify language, package manager/build tool, test command, Docker/image strategy, deployment target, and branch policy.
+3. Ask at most one short clarification if a required choice is missing.
+4. Generate or update `.gitlab-ci.yml` with the minimum stages needed.
+5. List required GitLab CI/CD variables and assumptions.
+6. Validate YAML syntax when a validator is available, or inspect indentation and job references manually.
 
-If the project is not Java, or if it is Gradle, Node, Go, Python, Helm-only, Docker-in-Docker, or not deployed to Kubernetes, adapt the pattern rather than copying it directly. Ask one short clarification if the language, deployment target, or image registry is unclear.
+## Project Inspection
 
-## First Inspect The Target Project
+Check files before writing CI. Prefer concrete project evidence over assumptions.
 
-Before generating or editing `.gitlab-ci.yml`, inspect the repository instead of assuming names.
+Common signals:
 
-Check:
+- Java Maven: `pom.xml`, `mvnw`, `.mvn/wrapper/`.
+- Java Gradle: `build.gradle`, `build.gradle.kts`, `gradlew`.
+- Node.js: `package.json`, lockfiles, scripts.
+- Python: `pyproject.toml`, `requirements.txt`, `poetry.lock`, `Pipfile`.
+- Go: `go.mod`.
+- Docker: `Dockerfile`, `build/Dockerfile`, docker compose files.
+- Kubernetes: `k8s/`, `deploy/`, `helm/`, `Chart.yaml`, `kustomization.yaml`.
+- Existing GitLab CI: `.gitlab-ci.yml`, `.gitlab-ci.yaml`.
 
-- `pom.xml` and child module directories.
-- Whether `mvnw` and `.mvn/wrapper/` exist.
-- Whether `build/Dockerfile` exists and how it accepts the module or artifact path.
-- Existing `.gitlab-ci.yml` or `.gitlab-ci.yaml` if present.
-- Which modules are deployable services versus shared libraries.
-- Existing Kubernetes Deployment/container naming conventions, if manifests are present.
+If the project has multiple services, identify which directories are deployable services and which are shared libraries.
 
-If module discovery is ambiguous, summarize the candidate modules and ask which ones should get deploy jobs.
+## Choose Pipeline Shape
 
-## Pipeline Shape
+Use only the stages the project needs.
 
-Generate a pipeline with these stages, in this order:
+Common stage sets:
 
 ```yaml
 stages:
+  - test
+  - build
+```
+
+```yaml
+stages:
+  - test
+  - package
+  - image
+```
+
+```yaml
+stages:
+  - test
   - package
   - image
   - deploy
 ```
 
-Use top-level `workflow.rules` to limit pipeline creation. The reference project runs on `develop` and `release-*` branches:
+If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs.
+
+## Branch And Rule Policy
+
+Prefer `workflow.rules` when the user wants pipelines only on specific branches.
+
+Example based on this repository:
 
 ```yaml
 workflow:
@@ -60,182 +82,146 @@ workflow:
     - when: never
 ```
 
-Adjust branch patterns only when the target project has clearly different branch names, such as `main`, `master`, `test`, or environment branches.
+For job-level rules, use `rules.changes` to avoid running unrelated service jobs in monorepos.
 
-## Base Variables
+If following this repository's branch policy:
 
-Prefer variables that keep Maven, registry, and Kaniko behavior centralized:
+- `develop`: package, image, and deploy can run when relevant files change.
+- `release-*`: package and image can run, but deploy jobs are skipped by default.
+
+Deploy skip rule:
 
 ```yaml
+rules:
+  - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+    when: never
+  - changes:
+      - <service-path>/**/*
+```
+
+Ask before applying this policy to another project unless the user says to reuse this repository's behavior.
+
+## Build Tool Templates
+
+Use these as starting points and adapt to the target project's actual commands.
+
+### Java Maven
+
+Use Maven Wrapper when present:
+
+```yaml
+image: maven:3.8.6-openjdk-8
+
 variables:
   MAVEN_USER_HOME: "$CI_PROJECT_DIR/.m2"
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository -Dfile.encoding=UTF-8"
-  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version -s $MAVEN_SETTINGS_XML"
-  KANIKO_EXTRA_ARGS: "--insecure --insecure-pull"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
+
+cache:
+  key: "$CI_PROJECT_NAME-maven"
+  paths:
+    - .m2/repository/
+    - .m2/wrapper/
+
+before_script:
+  - mkdir -p .m2
+  - chmod +x ./mvnw
 ```
 
-Keep `KANIKO_EXTRA_ARGS` only when the registry requires insecure access. For standard TLS registries, remove it or leave it empty.
-
-Expected GitLab CI/CD variables:
-
-- `MAVEN_SETTINGS_XML`: path to the Maven settings file available in CI.
-- `DOCKER_REGISTRY`: registry host, for example `registry.example.com`.
-- `CI_REGISTRY_PROJECT`: namespace/project path inside the registry.
-- `CI_REGISTRY_USER`: registry username.
-- `CI_REGISTRY_PASSWORD`: registry password or token.
-- `KUBE_NAMESPACE`: target Kubernetes namespace.
-- `KUBECONFIG_FILE`: GitLab file variable containing kubeconfig, or a path to one.
-
-Per-service variables:
-
-- `MODULE_NAME`: Maven module directory and default image/container name.
-- `KUBE_DEPLOYMENT`: Kubernetes Deployment name.
-- `KUBE_CONTAINER`: container name inside the Deployment.
-
-## Maven Package Template
-
-Use Maven wrapper when present. Package only the selected module and its dependencies with `-pl $MODULE_NAME -am`.
-
-Template:
-
-```yaml
-.package_template:
-  stage: package
-  script:
-    - ./mvnw $MAVEN_CLI_OPTS -pl $MODULE_NAME -am clean package -DskipTests
-    - mkdir -p build/temp
-    - |
-      JAR_FILE=""
-      for file in "$MODULE_NAME"/target/"$MODULE_NAME"-*.jar; do
-        case "$file" in
-          *-sources.jar|*/original-*) continue ;;
-        esac
-        JAR_FILE="$file"
-        break
-      done
-      test -n "$JAR_FILE"
-      cp "$JAR_FILE" build/temp/
-  artifacts:
-    name: "$MODULE_NAME-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - build/temp/*.jar
-    exclude:
-      - "**/target/*-sources.jar"
-      - "**/target/original-*.jar"
-    expire_in: 7 days
-```
-
-If the target project does not use Maven wrapper, replace `./mvnw` with `mvn` and remove `chmod +x ./mvnw` from `before_script`.
-
-If artifact naming does not match `$MODULE_NAME-*.jar`, update the JAR discovery logic instead of assuming the reference naming.
-
-## Single Module Projects
-
-For a single deployable Maven project, keep the same three-stage pipeline but simplify the Maven build and job variables. Do not force `-pl $MODULE_NAME -am` when the repository root itself is the service.
-
-Use this package template for a root-level Spring Boot or Java service:
-
-```yaml
-.package_template:
-  stage: package
-  script:
-    - ./mvnw $MAVEN_CLI_OPTS clean package -DskipTests
-    - mkdir -p build/temp
-    - |
-      JAR_FILE=""
-      for file in target/*.jar; do
-        case "$file" in
-          *-sources.jar|*/original-*) continue ;;
-        esac
-        JAR_FILE="$file"
-        break
-      done
-      test -n "$JAR_FILE"
-      cp "$JAR_FILE" build/temp/
-  artifacts:
-    name: "$CI_PROJECT_NAME-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - build/temp/*.jar
-    exclude:
-      - "**/target/*-sources.jar"
-      - "**/target/original-*.jar"
-    expire_in: 7 days
-```
-
-For the image job, choose a stable image name. Prefer `SERVICE_NAME` for single-module projects because there is no module directory to reuse:
-
-```yaml
-variables:
-  SERVICE_NAME: <service-name>
-```
-
-Then build the image as:
-
-```yaml
-IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$SERVICE_NAME:$IMAGE_TAG"
-/kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/build/Dockerfile" --destination "$IMAGE_URL" $KANIKO_EXTRA_ARGS
-```
-
-Only pass `--build-arg MODULE_NAME=...` if the target Dockerfile actually expects it. For a single module, the Dockerfile often only needs to copy `build/temp/*.jar`.
-
-Single-module jobs usually look like this:
+Single-module package job:
 
 ```yaml
 package:
-  extends: .package_template
-  rules:
-    - changes:
-        - pom.xml
-        - mvnw
-        - .mvn/wrapper/**/*
-        - build/Dockerfile
-        - src/**/*
-
-image:
-  extends: .image_template
-  needs:
-    - job: package
-      artifacts: true
-  rules:
-    - changes:
-        - pom.xml
-        - mvnw
-        - .mvn/wrapper/**/*
-        - build/Dockerfile
-        - src/**/*
-
-deploy:
-  extends: .deploy_template
-  needs:
-    - job: image
-      artifacts: true
-  variables:
-    KUBE_DEPLOYMENT: <deployment-name>
-    KUBE_CONTAINER: <container-name>
-  rules:
-    - changes:
-        - pom.xml
-        - mvnw
-        - .mvn/wrapper/**/*
-        - build/Dockerfile
-        - src/**/*
+  stage: package
+  script:
+    - ./mvnw $MAVEN_CLI_OPTS clean package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 7 days
 ```
 
-If the single-module project still stores code under a nonstandard directory, replace `src/**/*` with the actual source paths.
-
-## Kaniko Image Template
-
-Use Kaniko for image builds and pass the module name into the shared Dockerfile.
-
-Template:
+Multi-module package job:
 
 ```yaml
-.image_template:
+package:<short-name>:
+  stage: package
+  variables:
+    MODULE_NAME: <module-directory>
+  script:
+    - ./mvnw $MAVEN_CLI_OPTS -pl $MODULE_NAME -am clean package -DskipTests
+  artifacts:
+    paths:
+      - <module-directory>/target/*.jar
+    expire_in: 7 days
+```
+
+If using this repository's Dockerfile pattern, copy the selected JAR into `build/temp/` instead of publishing directly from `target/`.
+
+### Node.js
+
+Infer commands from `package.json` scripts. Typical job:
+
+```yaml
+image: node:20
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - node_modules/
+
+test:
+  stage: test
+  script:
+    - npm ci
+    - npm test
+```
+
+Use `npm run build` only if a `build` script exists.
+
+### Python
+
+Adapt to the dependency manager present:
+
+```yaml
+image: python:3.11
+
+test:
+  stage: test
+  script:
+    - pip install -r requirements.txt
+    - pytest
+```
+
+For Poetry projects, use `poetry install` and `poetry run pytest`.
+
+### Go
+
+```yaml
+image: golang:1.22
+
+test:
+  stage: test
+  script:
+    - go test ./...
+```
+
+## Image Build Options
+
+Choose the image strategy based on project constraints.
+
+### Kaniko
+
+Use Kaniko when Docker-in-Docker is unavailable or not desired.
+
+```yaml
+image:
   stage: image
   image:
-    name: image.server:8082/library/kaniko-project/executor:v1.23.2-debug
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
-  before_script: []
   script:
     - mkdir -p /kaniko/.docker
     - |
@@ -249,9 +235,8 @@ Template:
       EOF
     - |
       IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)"
-      IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$MODULE_NAME:$IMAGE_TAG"
-      echo "Pushing image: $IMAGE_URL"
-      /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/build/Dockerfile" --build-arg MODULE_NAME="$MODULE_NAME" --destination "$IMAGE_URL" $KANIKO_EXTRA_ARGS
+      IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
+      /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE_URL"
       echo "IMAGE_URL=$IMAGE_URL" > build.env
   artifacts:
     reports:
@@ -259,25 +244,26 @@ Template:
     expire_in: 7 days
 ```
 
-Adapt `image.name` to the target organization's internal mirror. Use the public Kaniko image only if allowed by the project's network policy.
+Use internal Kaniko image mirrors and insecure flags only when the target environment requires them.
 
-Keep the `dotenv` artifact because deploy jobs need the exact `IMAGE_URL` produced by the image job.
+### Docker-In-Docker
 
-## Kubernetes Deploy Template
+Only use Docker-in-Docker when the project already uses it or the user requests it. It requires runner support and is often less appropriate for locked-down environments.
 
-Deploy by updating the Deployment container image and waiting for rollout.
+## Deploy Options
 
-Template:
+Generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
+
+### kubectl set image
+
+Use this when the project deploys by updating an existing Kubernetes Deployment image:
 
 ```yaml
-.deploy_template:
+deploy:
   stage: deploy
-  environment:
-    name: $CI_COMMIT_REF_SLUG
   image:
-    name: image.server:8082/library/bitnami/kubectl:1.28
+    name: bitnami/kubectl:1.28
     entrypoint: [""]
-  before_script: []
   cache: []
   script:
     - |
@@ -291,83 +277,67 @@ Template:
     - kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$KUBE_DEPLOYMENT"
 ```
 
-If the target project uses Helm, Kustomize, Argo CD, or GitOps, do not force this template. Ask whether to keep direct `kubectl set image` or generate a deployment step for the actual tool.
+### Helm, Kustomize, GitOps
 
-## Service Job Pattern
+If manifests indicate Helm, Kustomize, Argo CD, or another GitOps flow, do not replace it with `kubectl set image`. Ask whether to generate CI for the existing deployment tool.
 
-For each deployable module, create three jobs with consistent naming:
+## Reference Template From This Repository
 
-```yaml
-package:<short-name>:
-  extends: .package_template
-  variables:
-    MODULE_NAME: <module-directory>
-  rules:
-    - changes:
-        - pom.xml
-        - mvnw
-        - .mvn/wrapper/**/*
-        - build/Dockerfile
-        - <module-directory>/**/*
+Use this only when the target is Java Maven and the user wants the same pattern as this repository:
 
-image:<short-name>:
-  extends: .image_template
-  needs:
-    - job: package:<short-name>
-      artifacts: true
-  variables:
-    MODULE_NAME: <module-directory>
-  rules:
-    - changes:
-        - pom.xml
-        - mvnw
-        - .mvn/wrapper/**/*
-        - build/Dockerfile
-        - <module-directory>/**/*
+- Branch workflow: run pipelines on `develop` and `release-*`.
+- Stages: `package`, `image`, `deploy`.
+- Maven package: `./mvnw $MAVEN_CLI_OPTS -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
+- Artifact handoff: copy the service JAR to `build/temp/*.jar`.
+- Image build: Kaniko with `build/Dockerfile` and `--build-arg MODULE_NAME="$MODULE_NAME"`.
+- Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
+- Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
+- Deploy: `kubectl set image` and `kubectl rollout status`.
+- Release policy: deploy jobs skip `release-*` by default.
 
-deploy:<short-name>:
-  extends: .deploy_template
-  needs:
-    - job: image:<short-name>
-      artifacts: true
-  variables:
-    KUBE_DEPLOYMENT: <deployment-name>
-    KUBE_CONTAINER: <container-name>
-  rules:
-    - changes:
-        - pom.xml
-        - mvnw
-        - .mvn/wrapper/**/*
-        - build/Dockerfile
-        - <module-directory>/**/*
-```
+For each deployable module, generate:
 
-Derive `<short-name>` from the service name, not necessarily the full module directory. Example: `nledu-cloud-agi-third-proxy` can become `third-proxy`.
+- `package:<short-name>`
+- `image:<short-name>` needing `package:<short-name>` artifacts
+- `deploy:<short-name>` needing `image:<short-name>` dotenv artifacts
 
-If changing a shared API/library module should rebuild dependent services, include that shared module path in each affected service's `rules.changes`.
+Include `rules.changes` for root build files, wrapper files, Dockerfile, and the service path.
+
+## Required Variables
+
+List only variables needed by the generated pipeline. Common variables:
+
+- `DOCKER_REGISTRY`
+- `CI_REGISTRY_PROJECT`
+- `CI_REGISTRY_USER`
+- `CI_REGISTRY_PASSWORD`
+- `KUBE_NAMESPACE`
+- `KUBECONFIG_FILE`
+- `KUBE_DEPLOYMENT`
+- `KUBE_CONTAINER`
+- `MAVEN_SETTINGS_XML` if a custom Maven settings file is used
+
+Never hard-code secrets.
 
 ## Quality Checklist
 
-Before finishing, verify the generated YAML for these properties:
+Before finishing, verify:
 
 - `.gitlab-ci.yml` is valid YAML with correct indentation.
 - Stage names match all job `stage` values.
 - `needs` references use exact job names.
-- `image` jobs consume package artifacts.
-- `deploy` jobs consume the dotenv `IMAGE_URL` from image jobs.
-- Required variables fail fast with shell parameter checks.
-- `rules.changes` includes root build files, wrapper files, Dockerfile, and the module path.
-- Shared library changes are handled if required by the project.
+- Artifacts or dotenv files are produced before downstream jobs consume them.
+- Required variables fail fast with shell parameter checks when used in scripts.
+- `rules.changes` paths match the actual project layout.
+- Branch and deploy behavior match the user's stated environment policy.
 - Secrets are referenced as CI variables, never hard-coded.
-- Internal image mirrors and registry names are adapted to the target environment.
-
-If the repository has a YAML validator available, run it. If not, at least inspect the generated file and mention that CI validation should be done in GitLab.
 
 ## Output Style
 
-When creating a pipeline for another project:
+When generating CI:
 
-- Make the smallest complete `.gitlab-ci.yml` that matches the project's modules and deployment approach.
-- Briefly list the CI/CD variables the user must configure in GitLab.
-- Mention any assumptions, such as deployment/container names or branch patterns.
+- Edit or create `.gitlab-ci.yml` directly unless the user asks only for an example.
+- Keep the pipeline minimal for the detected project.
+- Briefly list assumptions and GitLab variables to configure.
+- Mention validation performed or that GitLab CI lint should be used.
 - Do not commit changes unless the user explicitly asks.
