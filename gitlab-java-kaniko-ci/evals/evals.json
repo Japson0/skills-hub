@@ -1,0 +1,23 @@
+{
+  "skill_name": "gitlab-java-kaniko-ci",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "这个仓库是 Maven 多模块 Java 项目，有 manager、chat、analysis 三个服务。请参考当前项目的模式生成 .gitlab-ci.yml，使用 Kaniko 构建镜像并用 kubectl 发布。",
+      "expected_output": "生成包含 package/image/deploy 三阶段、模板 job、每个服务三类 job、CI 变量说明和 Kubernetes 部署变量的 GitLab CI 配置。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "帮我把另一个 Spring Boot 单模块项目接入 GitLab CI，要求 Maven 打包、Kaniko 推镜像、kubectl set image 发布到 k8s。",
+      "expected_output": "先检查项目结构，再生成适配单模块项目的 GitLab CI 配置，不应强行生成多模块 jobs。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "给现有 .gitlab-ci.yml 增加一个 nledu-cloud-agi-report 服务，命名 report，沿用项目里的 package/image/deploy 规则。",
+      "expected_output": "只追加 report 服务对应的 package、image、deploy jobs，并保持 needs、rules.changes、MODULE_NAME、KUBE_DEPLOYMENT、KUBE_CONTAINER 一致。",
+      "files": []
+    }
+  ]
+}
