@@ -154,7 +154,6 @@ package:
   artifacts:
     paths:
       - target/*.jar
-    expire_in: 7 days
 ```
 
 Multi-module package job:
@@ -169,8 +168,9 @@ package:<short-name>:
   artifacts:
     paths:
       - <module-directory>/target/*.jar
-    expire_in: 7 days
 ```
+
+Do not set `artifacts.expire_in` unless the user asks for a specific retention period; omitted artifact expiration should follow the GitLab default artifact expiration policy.
 
 If using this repository's Dockerfile pattern, copy the selected JAR into `build/temp/` instead of publishing directly from `target/`.
 
@@ -257,7 +257,6 @@ image:
   artifacts:
     reports:
       dotenv: build.env
-    expire_in: 7 days
 ```
 
 Use `--insecure-pull` for HTTP base-image registries and `--insecure` for HTTP destination registries.
