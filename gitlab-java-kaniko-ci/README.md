@@ -2,7 +2,7 @@
 
 这是一个用于生成 `.gitlab-ci.yml` 的通用 opencode skill。
 
-它的目标不是固定套用某一种 CI 模板，而是先分析目标项目结构，再根据项目的语言、构建工具、Dockerfile、部署方式和分支策略，生成最小可用的 GitLab CI 配置。
+它的目标不是固定套用某一种 CI 模板，而是先分析目标项目结构，再根据项目的语言、构建工具、Dockerfile、部署方式和分支策略，生成可用的 GitLab CI 配置。对于当前环境的 Java Maven 服务，默认正常流程是构建 JAR 包、构建镜像、然后更新 K8S 中的镜像信息。
 
 
 ## 适用场景
@@ -37,7 +37,7 @@ skill 会按以下步骤执行：
 2. 判断项目语言和构建工具。
 3. 判断是否存在 Dockerfile。
 4. 如果是 Java 项目，判断 JDK 版本。
-5. 判断是否需要测试、打包、构建镜像、部署。
+5. 判断是否需要测试、打包、构建镜像、部署；Java Maven 服务默认按构建 JAR、构建镜像、更新 K8S 镜像信息处理，除非用户明确不要部署。
 6. 根据项目实际情况生成 `.gitlab-ci.yml`。
 7. 列出需要在 GitLab CI/CD Variables 中配置的变量。
 8. 尽量校验 YAML 结构和 job 依赖关系。
@@ -75,6 +75,12 @@ skill 会按以下步骤执行：
 package -> image -> deploy
 ```
 
+对应实际动作：
+
+```text
+构建 JAR 包 -> 构建并推送 Docker 镜像 -> kubectl set image 更新 K8S Deployment 镜像
+```
+
 多模块项目会为每个服务生成：
 
 ```text
@@ -92,6 +98,7 @@ deploy:<service>
 
 - 不盲目套模板。
 - 不给不需要部署的项目添加 deploy job。
+- Java Maven 服务的正常流程包含 deploy job，用于更新 K8S 中的镜像信息；只有用户明确说 CI-only、不部署或项目证据不支持部署时才省略。
 - 不给没有 Dockerfile 的项目强行添加 image job。
 - 单模块 Java 项目不使用多模块的 `-pl $MODULE_NAME -am`。
 - Java Maven 项目先检测 JDK 版本，再选择对应内网 Maven 镜像；如果无法判断 JDK 8 或 JDK 17，应先询问确认。

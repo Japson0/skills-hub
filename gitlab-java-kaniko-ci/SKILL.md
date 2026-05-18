@@ -5,14 +5,14 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.3"
+  version: "1.4"
 ---
 
-Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline.
+Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image.
 
 Treat `gitlab-cli.yml` in user prompts as likely meaning GitLab CI config. The actual file name should normally be `.gitlab-ci.yml` unless the user explicitly says otherwise.
 
-This skill is general-purpose. Do not blindly copy this repository's pipeline. Use the Java Maven + Kaniko + kubectl template only when the target project matches that shape or the user explicitly asks to reuse this project's template.
+This skill is general-purpose. Do not blindly copy this repository's pipeline for non-Java projects. For Java Maven services that have a Dockerfile and are intended to deploy, prefer the Java Maven + Kaniko + kubectl flow because it matches the normal delivery path in this environment.
 
 ## Workflow
 
@@ -68,7 +68,9 @@ stages:
   - deploy
 ```
 
-If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs.
+For Java Maven services, the normal pipeline shape is `package -> image -> deploy`: build the JAR, build/push the image, then update the Kubernetes Deployment image with `kubectl set image`. Use this end-to-end flow by default when the project has a Dockerfile or deployment convention and the user does not explicitly say CI-only/no-deploy.
+
+If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For non-Java projects, keep using the smallest stage set that matches the request and project evidence.
 
 ## Branch And Rule Policy
 
@@ -260,7 +262,9 @@ Only use Docker-in-Docker when the project already uses it or the user requests 
 
 ## Deploy Options
 
-Generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
+For Java Maven services, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`. Generate this deploy job by default when using the Java Maven + Kaniko flow unless the user explicitly says not to deploy.
+
+For other project types, generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
 
 Use internal kubectl image `image.server:8082/library/bitnami/kubectl:1.28` for kubectl deploy jobs.
 
@@ -293,16 +297,18 @@ If manifests indicate Helm, Kustomize, Argo CD, or another GitOps flow, do not r
 
 ## Reference Template From This Repository
 
-Use this only when the target is Java Maven and the user wants the same pattern as this repository:
+Use this when the target is a Java Maven service in this environment, or when the user wants the same pattern as this repository:
 
 - Branch workflow: run pipelines on `develop` and `release-*`.
 - Stages: `package`, `image`, `deploy`.
+- Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
 - Image build: Kaniko with `build/Dockerfile` and `--build-arg MODULE_NAME="$MODULE_NAME"`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
+- Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
 - Release policy: deploy jobs skip `release-*` by default.
 
 For each deployable module, generate:
