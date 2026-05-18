@@ -108,10 +108,31 @@ deploy:<service>
 - Kaniko image job 使用内网镜像 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`。
 - Kaniko executor 命令带 `--insecure-pull --insecure`，允许构建镜像时从 HTTP registry 拉取基础镜像并推送到 HTTP registry。
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
+- 发布通知是可选能力，只有用户明确要求发布/部署通知时才生成通知 job。
+- 企业微信发布通知使用 GitLab CI/CD Variable `WECHAT_` 保存 webhook URL，不在 `.gitlab-ci.yml` 中硬编码 webhook 地址或 key。
+- 通知 job 默认独立放在 `notify` stage，使用 `curl` 发送 HTTP 请求，不依赖 Python 或第三方 `requests` 包。
 - 默认 workflow 只允许 `develop` 和 `release-*` 分支启动流水线，其他分支都跳过。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
 - secrets 只引用 GitLab CI/CD Variables，不写入配置文件。
 - 尽量生成最小、可维护的 `.gitlab-ci.yml`。
+
+## 可选发布通知
+
+当用户要求增加发布通知时，skill 会在 pipeline 中额外生成 `notify` 阶段和通知 job。通知内容类似：
+
+```text
+开发环境发布通知
+<项目名>:<镜像或分支>发布成功
+```
+
+失败时会发送：
+
+```text
+开发环境发布通知
+<项目名>:<镜像或分支>发布失败
+```
+
+企业微信 webhook URL 通过 `WECHAT_` 变量读取，例如在 GitLab 项目的 CI/CD Variables 中配置 `WECHAT_`。默认 curl 镜像使用 `image.server:8082/library/curlimages/curl:8.9.1`；如果运行环境不能拉取该镜像，需要替换为其他可用的内网 curl 镜像，或其他包含 `curl` 命令的镜像。
 
 ## 常见变量
 
@@ -120,6 +141,7 @@ deploy:<service>
 
 - `KUBE_NAMESPACE`
 - `MAVEN_SETTINGS_XML`
+- `WECHAT_`：仅在要求生成发布/部署通知时需要
 
 
 实际变量以生成后的 `.gitlab-ci.yml` 为准。
