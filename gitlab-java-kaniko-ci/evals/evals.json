@@ -21,14 +21,14 @@
     },
     {
       "id": 4,
-      "prompt": "这个 Maven 项目的 pom.xml 里配置了 <java.version>17</java.version>，帮我生成 GitLab CI 打包和 Kaniko 构建镜像。",
-      "expected_output": "识别为 JDK 17 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.9.12-eclipse-temurin-17，不应使用 JDK 8 Maven 镜像。",
+      "prompt": "这个 Maven 项目的 pom.xml 里配置了 <java.version>17</java.version>，有 Dockerfile，帮我生成正常发布流程的 GitLab CI。",
+      "expected_output": "识别为 JDK 17 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.9.12-eclipse-temurin-17，不应使用 JDK 8 Maven 镜像；正常流程应包含 package、image、deploy，deploy 使用 kubectl set image 更新 K8S 镜像。",
       "files": []
     },
     {
       "id": 5,
-      "prompt": "这个 Maven 项目的 pom.xml 里配置了 <maven.compiler.source>1.8</maven.compiler.source>，帮我生成 GitLab CI。",
-      "expected_output": "识别为 JDK 8 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.8.6-openjdk-8。",
+      "prompt": "这个 Maven 项目的 pom.xml 里配置了 <maven.compiler.source>1.8</maven.compiler.source>，有 build/Dockerfile，帮我生成 GitLab CI。",
+      "expected_output": "识别为 JDK 8 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.8.6-openjdk-8；默认正常流程应构建 JAR、构建镜像、再更新 K8S 中的镜像信息。",
       "files": []
     }
   ]
