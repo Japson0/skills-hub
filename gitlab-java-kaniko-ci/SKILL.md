@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.5"
+  version: "1.6"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image.
@@ -227,13 +227,13 @@ Choose the image strategy based on project constraints.
 
 ### Kaniko
 
-Use Kaniko when Docker-in-Docker is unavailable or not desired.
+Use Kaniko when Docker-in-Docker is unavailable or not desired. Use internal Kaniko executor image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug` for image build jobs.
 
 ```yaml
 image:
   stage: image
   image:
-    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    name: image.server:8082/library/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
   script:
     - mkdir -p /kaniko/.docker
@@ -257,7 +257,7 @@ image:
     expire_in: 7 days
 ```
 
-Use internal Kaniko image mirrors and insecure flags only when the target environment requires them.
+Use insecure flags only when the target environment requires them.
 
 ### Docker-In-Docker
 
@@ -307,7 +307,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
-- Image build: Kaniko with `build/Dockerfile` and `--build-arg MODULE_NAME="$MODULE_NAME"`.
+- Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, and `--build-arg MODULE_NAME="$MODULE_NAME"`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
