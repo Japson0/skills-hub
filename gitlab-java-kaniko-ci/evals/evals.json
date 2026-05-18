@@ -10,25 +10,25 @@
     {
       "id": 2,
       "prompt": "这个是单模块 Java Maven 项目，想直接用 GitLab CI 完成打包、Kaniko 推镜像、kubectl 发布。帮我生成 .gitlab-ci.yml。",
-      "expected_output": "生成单模块 Java Maven pipeline，使用 Maven package、Kaniko image、kubectl deploy，不应使用多模块 -pl MODULE_NAME；kubectl job 应使用 image.server:8082/library/bitnami/kubectl:1.28，需列出 registry 和 Kubernetes 变量。",
+      "expected_output": "生成单模块 Java Maven pipeline，使用 Maven package、Kaniko image、kubectl deploy，不应使用多模块 -pl MODULE_NAME；Maven 命令必须带 -s $MAVEN_SETTINGS_XML 并校验 MAVEN_SETTINGS_XML；kubectl job 应使用 image.server:8082/library/bitnami/kubectl:1.28，需列出 registry、MAVEN_SETTINGS_XML 和 Kubernetes 变量。",
       "files": []
     },
     {
       "id": 3,
       "prompt": "参考当前仓库的 GitLab CI 模板，给另一个 Maven 多模块项目生成 manager 和 chat 两个服务的 CI。release 分支只构建镜像不发布。",
-      "expected_output": "复用当前仓库 Java Maven + Kaniko + kubectl 模板，生成 package/image/deploy 三类服务 job，deploy jobs 在 release-* 分支 when: never，kubectl job 使用 image.server:8082/library/bitnami/kubectl:1.28。",
+      "expected_output": "复用当前仓库 Java Maven + Kaniko + kubectl 模板，生成 package/image/deploy 三类服务 job，Maven 命令必须带 -s $MAVEN_SETTINGS_XML，deploy jobs 在 release-* 分支 when: never，kubectl job 使用 image.server:8082/library/bitnami/kubectl:1.28。",
       "files": []
     },
     {
       "id": 4,
       "prompt": "这个 Maven 项目的 pom.xml 里配置了 <java.version>17</java.version>，有 Dockerfile，帮我生成正常发布流程的 GitLab CI。",
-      "expected_output": "识别为 JDK 17 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.9.12-eclipse-temurin-17，不应使用 JDK 8 Maven 镜像；正常流程应包含 package、image、deploy，deploy 使用 kubectl set image 更新 K8S 镜像。",
+      "expected_output": "识别为 JDK 17 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.9.12-eclipse-temurin-17，不应使用 JDK 8 Maven 镜像；Maven 命令必须带 -s $MAVEN_SETTINGS_XML；正常流程应包含 package、image、deploy，deploy 使用 kubectl set image 更新 K8S 镜像。",
       "files": []
     },
     {
       "id": 5,
       "prompt": "这个 Maven 项目的 pom.xml 里配置了 <maven.compiler.source>1.8</maven.compiler.source>，有 build/Dockerfile，帮我生成 GitLab CI。",
-      "expected_output": "识别为 JDK 8 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.8.6-openjdk-8；默认正常流程应构建 JAR、构建镜像、再更新 K8S 中的镜像信息。",
+      "expected_output": "识别为 JDK 8 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.8.6-openjdk-8；Maven 命令必须带 -s $MAVEN_SETTINGS_XML；默认正常流程应构建 JAR、构建镜像、再更新 K8S 中的镜像信息。",
       "files": []
     }
   ]
