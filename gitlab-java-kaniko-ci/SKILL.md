@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.9"
+  version: "1.10"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image.
@@ -76,15 +76,13 @@ If the user asks for CI only, do not add deployment. If the project has no Docke
 
 Prefer `workflow.rules` when the user wants pipelines only on specific branches.
 
-In this environment, ignore `master` and `main` branches by default. Add an explicit first `workflow.rules` entry that returns `when: never` for `master` and `main`, then allow the intended delivery branches.
+In this environment, only `develop` and `release-*` branches should start pipelines. Use a positive allow-list rule for those branches, then `when: never` for everything else.
 
 Example based on this repository:
 
 ```yaml
 workflow:
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^(master|main)$/'
-      when: never
     - if: '$CI_COMMIT_BRANCH =~ /^(develop|release-.*)$/'
     - when: never
 ```
@@ -95,7 +93,7 @@ If following this repository's branch policy:
 
 - `develop`: package, image, and deploy can run when relevant files change.
 - `release-*`: package and image can run, but deploy jobs are skipped by default.
-- `master` and `main`: skip the whole pipeline.
+- All other branches, including `master` and `main`: skip the whole pipeline.
 
 Deploy skip rule:
 
@@ -307,7 +305,7 @@ If manifests indicate Helm, Kustomize, Argo CD, or another GitOps flow, do not r
 
 Use this when the target is a Java Maven service in this environment, or when the user wants the same pattern as this repository:
 
-- Branch workflow: skip `master` and `main`; run pipelines on `develop` and `release-*`.
+- Branch workflow: only run pipelines on `develop` and `release-*`; skip every other branch.
 - Stages: `package`, `image`, `deploy`.
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
