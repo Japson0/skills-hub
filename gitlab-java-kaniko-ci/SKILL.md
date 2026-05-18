@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.1"
+  version: "1.3"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline.
@@ -17,7 +17,7 @@ This skill is general-purpose. Do not blindly copy this repository's pipeline. U
 ## Workflow
 
 1. Inspect the target project.
-2. Identify language, package manager/build tool, test command, Docker/image strategy, deployment target, and branch policy.
+2. Identify language, package manager/build tool, Java/JDK version when applicable, test command, Docker/image strategy, deployment target, and branch policy.
 3. Ask at most one short clarification if a required choice is missing.
 4. Generate or update `.gitlab-ci.yml` with the minimum stages needed.
 5. List required GitLab CI/CD variables and assumptions.
@@ -30,6 +30,7 @@ Check files before writing CI. Prefer concrete project evidence over assumptions
 Common signals:
 
 - Java Maven: `pom.xml`, `mvnw`, `.mvn/wrapper/`.
+- Java/JDK version: Maven `pom.xml` properties such as `java.version`, `maven.compiler.source`, `maven.compiler.target`, `maven.compiler.release`, Spring Boot parent conventions, `.java-version`, `Dockerfile` base images, and README/build documentation. Prefer explicit Maven compiler settings when present.
 - Java Gradle: `build.gradle`, `build.gradle.kts`, `gradlew`.
 - Node.js: `package.json`, lockfiles, scripts.
 - Python: `pyproject.toml`, `requirements.txt`, `poetry.lock`, `Pipfile`.
@@ -109,8 +110,15 @@ Use these as starting points and adapt to the target project's actual commands.
 
 Use Maven Wrapper when present:
 
+Before choosing the Maven build image, detect the project's JDK version from concrete files. Use these images for Maven package/test jobs:
+
+- JDK 8: `image.server:8082/library/maven:3.8.6-openjdk-8`
+- JDK 17: `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
+
+If the JDK version is ambiguous, ask one short clarification instead of guessing. Do not use the public Maven image when the project is clearly JDK 8 or JDK 17.
+
 ```yaml
-image: maven:3.8.6-openjdk-8
+image: image.server:8082/library/maven:3.8.6-openjdk-8
 
 variables:
   MAVEN_USER_HOME: "$CI_PROJECT_DIR/.m2"
@@ -254,6 +262,8 @@ Only use Docker-in-Docker when the project already uses it or the user requests 
 
 Generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
 
+Use internal kubectl image `image.server:8082/library/bitnami/kubectl:1.28` for kubectl deploy jobs.
+
 ### kubectl set image
 
 Use this when the project deploys by updating an existing Kubernetes Deployment image:
@@ -262,7 +272,7 @@ Use this when the project deploys by updating an existing Kubernetes Deployment 
 deploy:
   stage: deploy
   image:
-    name: bitnami/kubectl:1.28
+    name: image.server:8082/library/bitnami/kubectl:1.28
     entrypoint: [""]
   cache: []
   script:

@@ -36,16 +36,18 @@ skill 会按以下步骤执行：
 1. 检查目标项目结构。
 2. 判断项目语言和构建工具。
 3. 判断是否存在 Dockerfile。
-4. 判断是否需要测试、打包、构建镜像、部署。
-5. 根据项目实际情况生成 `.gitlab-ci.yml`。
-6. 列出需要在 GitLab CI/CD Variables 中配置的变量。
-7. 尽量校验 YAML 结构和 job 依赖关系。
+4. 如果是 Java 项目，判断 JDK 版本。
+5. 判断是否需要测试、打包、构建镜像、部署。
+6. 根据项目实际情况生成 `.gitlab-ci.yml`。
+7. 列出需要在 GitLab CI/CD Variables 中配置的变量。
+8. 尽量校验 YAML 结构和 job 依赖关系。
 
 ## 支持识别的项目类型
 
 当前 skill 会根据这些文件识别项目：
 
 - Java Maven：`pom.xml`、`mvnw`、`.mvn/wrapper/`
+- Java/JDK 版本：`pom.xml` 中的 `java.version`、`maven.compiler.source`、`maven.compiler.target`、`maven.compiler.release`，以及 `.java-version`、`Dockerfile`、README/构建文档
 - Java Gradle：`build.gradle`、`build.gradle.kts`、`gradlew`
 - Node.js：`package.json`、`package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`
 - Python：`pyproject.toml`、`requirements.txt`、`poetry.lock`、`Pipfile`
@@ -62,8 +64,10 @@ skill 会按以下步骤执行：
 - Java Maven 单模块项目
 - Java Maven 多模块项目
 - 使用 Maven Wrapper 打包 JAR
+- JDK 8 Maven job 使用 `image.server:8082/library/maven:3.8.6-openjdk-8`
+- JDK 17 Maven job 使用 `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
 - 使用 Kaniko 构建 Docker 镜像
-- 使用 `kubectl set image` 发布到 Kubernetes
+- 使用 `kubectl set image` 发布到 Kubernetes，kubectl job 镜像使用 `image.server:8082/library/bitnami/kubectl:1.28`
 
 当前仓库模板的核心流程：
 
@@ -90,6 +94,8 @@ deploy:<service>
 - 不给不需要部署的项目添加 deploy job。
 - 不给没有 Dockerfile 的项目强行添加 image job。
 - 单模块 Java 项目不使用多模块的 `-pl $MODULE_NAME -am`。
+- Java Maven 项目先检测 JDK 版本，再选择对应内网 Maven 镜像；如果无法判断 JDK 8 或 JDK 17，应先询问确认。
+- kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
 - secrets 只引用 GitLab CI/CD Variables，不写入配置文件。
 - 尽量生成最小、可维护的 `.gitlab-ci.yml`。
@@ -103,4 +109,3 @@ deploy:<service>
 
 
 实际变量以生成后的 `.gitlab-ci.yml` 为准。
-
