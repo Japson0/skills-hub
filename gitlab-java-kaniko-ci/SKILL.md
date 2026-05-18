@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.4"
+  version: "1.5"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image.
@@ -112,6 +112,8 @@ Use these as starting points and adapt to the target project's actual commands.
 
 Use Maven Wrapper when present:
 
+Maven builds in this environment must use the CI-provided Maven settings file because repository credentials and other required configuration live there. Include `-s $MAVEN_SETTINGS_XML` in every Maven command, and add a fail-fast check for `MAVEN_SETTINGS_XML` before running Maven.
+
 Before choosing the Maven build image, detect the project's JDK version from concrete files. Use these images for Maven package/test jobs:
 
 - JDK 8: `image.server:8082/library/maven:3.8.6-openjdk-8`
@@ -136,6 +138,7 @@ cache:
 before_script:
   - mkdir -p .m2
   - chmod +x ./mvnw
+  - ': "${MAVEN_SETTINGS_XML:?MAVEN_SETTINGS_XML is required}"'
 ```
 
 Single-module package job:
@@ -144,7 +147,7 @@ Single-module package job:
 package:
   stage: package
   script:
-    - ./mvnw $MAVEN_CLI_OPTS clean package -DskipTests
+    - ./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" clean package -DskipTests
   artifacts:
     paths:
       - target/*.jar
@@ -159,7 +162,7 @@ package:<short-name>:
   variables:
     MODULE_NAME: <module-directory>
   script:
-    - ./mvnw $MAVEN_CLI_OPTS -pl $MODULE_NAME -am clean package -DskipTests
+    - ./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests
   artifacts:
     paths:
       - <module-directory>/target/*.jar
@@ -302,7 +305,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Branch workflow: run pipelines on `develop` and `release-*`.
 - Stages: `package`, `image`, `deploy`.
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
-- Maven package: `./mvnw $MAVEN_CLI_OPTS -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
+- Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
 - Image build: Kaniko with `build/Dockerfile` and `--build-arg MODULE_NAME="$MODULE_NAME"`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
@@ -331,7 +334,7 @@ List only variables needed by the generated pipeline. Common variables:
 - `KUBECONFIG_FILE`
 - `KUBE_DEPLOYMENT`
 - `KUBE_CONTAINER`
-- `MAVEN_SETTINGS_XML` if a custom Maven settings file is used
+- `MAVEN_SETTINGS_XML`
 
 Never hard-code secrets.
 

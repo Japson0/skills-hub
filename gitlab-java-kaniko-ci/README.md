@@ -64,6 +64,7 @@ skill 会按以下步骤执行：
 - Java Maven 单模块项目
 - Java Maven 多模块项目
 - 使用 Maven Wrapper 打包 JAR
+- Maven 构建命令必须带 `-s $MAVEN_SETTINGS_XML`，因为私服、认证等配置依赖该 settings 文件
 - JDK 8 Maven job 使用 `image.server:8082/library/maven:3.8.6-openjdk-8`
 - JDK 17 Maven job 使用 `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
 - 使用 Kaniko 构建 Docker 镜像
@@ -102,6 +103,7 @@ deploy:<service>
 - 不给没有 Dockerfile 的项目强行添加 image job。
 - 单模块 Java 项目不使用多模块的 `-pl $MODULE_NAME -am`。
 - Java Maven 项目先检测 JDK 版本，再选择对应内网 Maven 镜像；如果无法判断 JDK 8 或 JDK 17，应先询问确认。
+- Java Maven 构建必须校验并使用 `MAVEN_SETTINGS_XML`，所有 Maven 命令都要带 `-s $MAVEN_SETTINGS_XML`。
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
 - secrets 只引用 GitLab CI/CD Variables，不写入配置文件。
@@ -113,6 +115,7 @@ deploy:<service>
 
 
 - `KUBE_NAMESPACE`
+- `MAVEN_SETTINGS_XML`
 
 
 实际变量以生成后的 `.gitlab-ci.yml` 为准。
