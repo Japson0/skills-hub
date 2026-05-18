@@ -92,6 +92,7 @@ deploy:<service>
 
 如果复用当前仓库分支策略：
 
+- `master` 和 `main` 分支默认忽略，不触发流水线
 - `develop` 分支允许打包、构建镜像、部署
 - `release-*` 分支只打包和构建镜像，默认跳过部署
 
@@ -107,6 +108,7 @@ deploy:<service>
 - Kaniko image job 使用内网镜像 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`。
 - Kaniko executor 命令带 `--insecure-pull --insecure`，允许构建镜像时从 HTTP registry 拉取基础镜像并推送到 HTTP registry。
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
+- 默认 workflow 忽略 `master` 和 `main` 分支。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
 - secrets 只引用 GitLab CI/CD Variables，不写入配置文件。
 - 尽量生成最小、可维护的 `.gitlab-ci.yml`。
