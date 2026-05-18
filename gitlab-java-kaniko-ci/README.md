@@ -67,7 +67,7 @@ skill 会按以下步骤执行：
 - Maven 构建命令必须带 `-s $MAVEN_SETTINGS_XML`，因为私服、认证等配置依赖该 settings 文件
 - JDK 8 Maven job 使用 `image.server:8082/library/maven:3.8.6-openjdk-8`
 - JDK 17 Maven job 使用 `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
-- 使用 Kaniko 构建 Docker 镜像，Kaniko job 镜像使用 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`
+- 使用 Kaniko 构建 Docker 镜像，Kaniko job 镜像使用 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`，并带 `--insecure-pull` 允许从 HTTP 仓库拉取基础镜像
 - 使用 `kubectl set image` 发布到 Kubernetes，kubectl job 镜像使用 `image.server:8082/library/bitnami/kubectl:1.28`
 
 当前仓库模板的核心流程：
@@ -105,6 +105,7 @@ deploy:<service>
 - Java Maven 项目先检测 JDK 版本，再选择对应内网 Maven 镜像；如果无法判断 JDK 8 或 JDK 17，应先询问确认。
 - Java Maven 构建必须校验并使用 `MAVEN_SETTINGS_XML`，所有 Maven 命令都要带 `-s $MAVEN_SETTINGS_XML`。
 - Kaniko image job 使用内网镜像 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`。
+- Kaniko executor 命令带 `--insecure-pull`，允许构建镜像时从 HTTP registry 拉取基础镜像。
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
 - secrets 只引用 GitLab CI/CD Variables，不写入配置文件。
