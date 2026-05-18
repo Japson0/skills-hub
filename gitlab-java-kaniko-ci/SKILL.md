@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.7"
+  version: "1.8"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image.
@@ -227,7 +227,7 @@ Choose the image strategy based on project constraints.
 
 ### Kaniko
 
-Use Kaniko when Docker-in-Docker is unavailable or not desired. Use internal Kaniko executor image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug` for image build jobs. Add `--insecure-pull` so Kaniko can pull base images from HTTP registries in this environment.
+Use Kaniko when Docker-in-Docker is unavailable or not desired. Use internal Kaniko executor image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug` for image build jobs. Add `--insecure-pull` and `--insecure` so Kaniko can pull base images from HTTP registries and push the built image to HTTP registries in this environment.
 
 ```yaml
 image:
@@ -249,7 +249,7 @@ image:
     - |
       IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)"
       IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
-      /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE_URL" --insecure-pull
+      /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE_URL" --insecure-pull --insecure
       echo "IMAGE_URL=$IMAGE_URL" > build.env
   artifacts:
     reports:
@@ -257,7 +257,7 @@ image:
     expire_in: 7 days
 ```
 
-Use `--insecure-pull` for HTTP base-image registries. Add push-side insecure flags only when the destination registry also requires them.
+Use `--insecure-pull` for HTTP base-image registries and `--insecure` for HTTP destination registries.
 
 ### Docker-In-Docker
 
@@ -307,7 +307,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
-- Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, and `--insecure-pull`.
+- Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, `--insecure-pull`, and `--insecure`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
