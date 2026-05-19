@@ -153,7 +153,7 @@ image:
       {"auths":{"$DOCKER_REGISTRY":{"username":"$CI_REGISTRY_USER","password":"$CI_REGISTRY_PASSWORD"}}}
       EOF
     - |
-      IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)"
+      IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)"
       IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
       /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE_URL" --insecure-pull --insecure
       echo "IMAGE_URL=$IMAGE_URL" > build.env
@@ -326,7 +326,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, `--insecure-pull`, and `--insecure`.
-- Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
+- Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
@@ -360,7 +360,7 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Artifact handoff: keep `dist/` as the package artifact when Vue CLI `outputDir` or Vite `build.outDir` does not override it.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
 - nginx image pattern: preserve Dockerfiles that use internal nginx bases such as `image.server:8082/nledu-cloud/nginx:1.14.2` and copy `dist` plus nginx config.
-- Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
+- Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: use the shared `kubectl set image` job on `develop`; skip `release-*` by default.
 - Release policy: deploy jobs skip `release-*` by default, so release branches only package and build/push images.
