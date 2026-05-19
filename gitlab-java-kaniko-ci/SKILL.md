@@ -304,7 +304,7 @@ If manifests indicate Helm, Kustomize, Argo CD, or another GitOps flow, do not r
 
 Only add publish notification jobs when the user explicitly asks for release/publish/deploy notification. Do not add notification by default.
 
-For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT_` as the webhook URL. Never hard-code the webhook URL or key in `.gitlab-ci.yml`.
+For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT_WEBHOOK` as the webhook URL. Never hard-code the webhook URL or key in `.gitlab-ci.yml`.
 
 Prefer an independent `notify` stage/job over adding notification logic to the kubectl deploy job, because the kubectl image may not include curl or other HTTP clients. Use a curl image available in the target environment. If no curl image is available, use another image that includes curl. Do not require Python or the third-party `requests` package for basic WeCom notification.
 
@@ -335,11 +335,11 @@ notify:deploy:success:
       artifacts: false
   when: on_success
   script:
-    - ': "${WECHAT_:?WECHAT_ is required}"'
+    - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
       TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
       CONTENT="开发环境发布通知\n${CI_PROJECT_NAME}:${TAG}发布成功"
-      curl -fsS -X POST "$WECHAT_" \
+      curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
         -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
 
@@ -351,11 +351,11 @@ notify:deploy:failure:
   cache: []
   when: on_failure
   script:
-    - ': "${WECHAT_:?WECHAT_ is required}"'
+    - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
       TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
       CONTENT="开发环境发布通知\n${CI_PROJECT_NAME}:${TAG}发布失败"
-      curl -fsS -X POST "$WECHAT_" \
+      curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
         -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
 ```
@@ -377,7 +377,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
-- Publish notification: optional WeCom notification via `WECHAT_`, using an independent curl notification job.
+- Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using an independent curl notification job.
 - Release policy: deploy jobs skip `release-*` by default.
 
 For each deployable module, generate:
@@ -401,7 +401,7 @@ List only variables needed by the generated pipeline. Common variables:
 - `KUBE_DEPLOYMENT`
 - `KUBE_CONTAINER`
 - `MAVEN_SETTINGS_XML`
-- `WECHAT_` when publish/deploy notification is requested
+- `WECHAT_WEBHOOK` when publish/deploy notification is requested
 
 Never hard-code secrets.
 
@@ -414,7 +414,7 @@ Before finishing, verify:
 - `needs` references use exact job names.
 - Artifacts or dotenv files are produced before downstream jobs consume them.
 - Required variables fail fast with shell parameter checks when used in scripts.
-- Optional notification jobs reference `WECHAT_` and never hard-code webhook URLs or keys.
+- Optional notification jobs reference `WECHAT_WEBHOOK` and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.
 - Branch and deploy behavior match the user's stated environment policy.
 - Secrets are referenced as CI variables, never hard-coded.
