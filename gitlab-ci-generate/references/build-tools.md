@@ -61,7 +61,7 @@ package:<short-name>:
       - <module-directory>/target/*.jar
 ```
 
-Do not set `artifacts.expire_in` unless the user asks for a specific retention period; omitted artifact expiration should follow the GitLab default artifact expiration policy.
+Do not set `artifacts.expire_in` unless the user asks for a specific retention period; omitted artifact expiration should follow the GitLab system/project default artifact retention policy. This is a global rule for every language and artifact, not only Maven JAR artifacts.
 
 If using this repository's Dockerfile pattern, copy the selected JAR into `build/temp/` instead of publishing directly from `target/`.
 

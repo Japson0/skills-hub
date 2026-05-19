@@ -163,6 +163,7 @@ npm 缓存策略：
 - Node/Vue 默认不生成测试或 lint job；只有用户明确要求或项目已有明确 CI 规则时才生成。
 - Node/Vue 默认缓存 `.npm/` 包下载缓存，不缓存 `node_modules/`。
 - Node/Vue 默认使用 `https://registry.npmmirror.com` 作为 npm registry；如果项目使用私有 npm 仓库或 `.npmrc`，优先保留项目配置。
+- 默认不设置 `artifacts.expire_in`，所有产物过期时间使用 GitLab 系统/项目默认设置；只有用户明确要求具体保留时间时才生成 `artifacts.expire_in`。
 - Kaniko image job 使用内网镜像 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`。
 - Kaniko executor 命令带 `--insecure-pull --insecure`，允许构建镜像时从 HTTP registry 拉取基础镜像并推送到 HTTP registry。
 - Vue/Node.js 前端如果 Dockerfile 同时引用 `dist/` 和 `lib/nginx.conf`，Kaniko context 应使用 `$CI_PROJECT_DIR`，不能只指向 `lib/`。

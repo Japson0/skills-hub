@@ -1,11 +1,11 @@
 ---
-name: gitlab-java-kaniko-ci
+name: gitlab-ci-generate
 description: Generate a .gitlab-ci.yml for an existing project by inspecting its language, build tool, Dockerfile, deployment style, and branch policy. Use when the user says they have a project and want to generate GitLab CI, gitlab-ci.yml, or gitlab-cli.yml; supports general project analysis and includes this environment's Java Maven + Kaniko + kubectl and Vue/Node.js static frontend + Kaniko patterns when applicable.
 license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.11"
+  version: "1.12"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `develop`; `release-*` builds images but skips deployment.
@@ -74,6 +74,12 @@ For Java Maven services, the normal pipeline shape is `package -> image -> deplo
 For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image on `develop`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `develop` can deploy, `release-*` builds images but skips deploy, and other branches are skipped when this environment's policy applies.
 
 If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For non-Java projects, keep using the smallest stage set that matches the request and project evidence.
+
+## Artifact Retention Policy
+
+Do not set `artifacts.expire_in` in generated GitLab CI jobs unless the user explicitly asks for a concrete artifact retention period. Omit artifact expiration so GitLab uses the system/project default artifact retention policy.
+
+This applies to every artifact type, including package outputs such as JAR files or `dist/`, dotenv reports such as `build.env`, and any future language-specific artifacts. If the user requests retention, set `artifacts.expire_in` only on the relevant jobs and mention the assumption in the final response.
 
 ## Branch And Rule Policy
 
@@ -395,6 +401,7 @@ Before finishing, verify:
 - Stage names match all job `stage` values.
 - `needs` references use exact job names.
 - Artifacts or dotenv files are produced before downstream jobs consume them.
+- `artifacts.expire_in` is omitted unless the user explicitly requested a concrete retention period.
 - Required variables fail fast with shell parameter checks when used in scripts.
 - Node jobs use the package manager and Node version indicated by project files.
 - Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
