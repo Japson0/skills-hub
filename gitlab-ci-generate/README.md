@@ -143,9 +143,11 @@ npm 缓存策略：
 
 - 默认缓存 npm 包下载缓存 `.npm/`
 - 默认不缓存 `node_modules/`
+- 默认 npm registry 使用 `https://registry.npmmirror.com`
 - 有 `package-lock.json` 时使用 `npm ci --cache .npm --prefer-offline`
 - 没有 `package-lock.json` 时使用 `npm install --cache .npm --prefer-offline`
 - 只有用户明确要求时，才考虑缓存 `node_modules/`
+- 如果项目已有私有 npm 仓库、scope registry 或 `.npmrc` 认证配置，应保留项目配置，不强行覆盖为淘宝源
 
 ## 生成原则
 
@@ -160,6 +162,7 @@ npm 缓存策略：
 - Node/Vue 项目先检测 Node 版本和包管理器，再选择对应 Node 构建镜像和安装命令。
 - Node/Vue 默认不生成测试或 lint job；只有用户明确要求或项目已有明确 CI 规则时才生成。
 - Node/Vue 默认缓存 `.npm/` 包下载缓存，不缓存 `node_modules/`。
+- Node/Vue 默认使用 `https://registry.npmmirror.com` 作为 npm registry；如果项目使用私有 npm 仓库或 `.npmrc`，优先保留项目配置。
 - Kaniko image job 使用内网镜像 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`。
 - Kaniko executor 命令带 `--insecure-pull --insecure`，允许构建镜像时从 HTTP registry 拉取基础镜像并推送到 HTTP registry。
 - Vue/Node.js 前端如果 Dockerfile 同时引用 `dist/` 和 `lib/nginx.conf`，Kaniko context 应使用 `$CI_PROJECT_DIR`，不能只指向 `lib/`。
@@ -223,6 +226,6 @@ npm 缓存策略：
 - `CI_REGISTRY_PASSWORD`
 - `WECHAT_WEBHOOK`：仅在要求生成发布/部署/镜像通知时需要
 
-前端项目通常不需要 `MAVEN_SETTINGS_XML`。如果使用私有 npm 仓库，可能还需要 `NPM_CONFIG_REGISTRY`、`NPM_TOKEN` 或项目特定的 npm 认证变量。
+前端项目通常不需要 `MAVEN_SETTINGS_XML`。Node/Vue 默认设置 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com`。如果使用私有 npm 仓库，可能还需要 `NPM_TOKEN`、scope registry 或项目特定的 npm 认证变量。
 
 实际变量以生成后的 `.gitlab-ci.yml` 为准。
