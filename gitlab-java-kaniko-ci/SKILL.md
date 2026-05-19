@@ -1,23 +1,23 @@
 ---
 name: gitlab-java-kaniko-ci
-description: Generate a .gitlab-ci.yml for an existing project by inspecting its language, build tool, Dockerfile, deployment style, and branch policy. Use when the user says they have a project and want to generate GitLab CI, gitlab-ci.yml, or gitlab-cli.yml; supports general project analysis and includes this repository's Java Maven + Kaniko + kubectl pipeline as a reference template when applicable.
+description: Generate a .gitlab-ci.yml for an existing project by inspecting its language, build tool, Dockerfile, deployment style, and branch policy. Use when the user says they have a project and want to generate GitLab CI, gitlab-ci.yml, or gitlab-cli.yml; supports general project analysis and includes this environment's Java Maven + Kaniko + kubectl and Vue/Node.js static frontend + Kaniko patterns when applicable.
 license: MIT
-compatibility: Requires GitLab CI. Optional templates cover Java Maven, Kaniko image builds, and Kubernetes deployment by kubectl.
+compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.10"
+  version: "1.11"
 ---
 
-Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image.
+Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `develop`; `release-*` builds images but skips deployment.
 
 Treat `gitlab-cli.yml` in user prompts as likely meaning GitLab CI config. The actual file name should normally be `.gitlab-ci.yml` unless the user explicitly says otherwise.
 
-This skill is general-purpose. Do not blindly copy this repository's pipeline for non-Java projects. For Java Maven services that have a Dockerfile and are intended to deploy, prefer the Java Maven + Kaniko + kubectl flow because it matches the normal delivery path in this environment.
+This skill is general-purpose. Do not blindly copy this repository's pipeline for unrelated projects. For Java Maven services that have a Dockerfile and are intended to deploy, prefer the Java Maven + Kaniko + kubectl flow because it matches the normal delivery path in this environment. For Vue/Node.js frontends that build static assets and ship with nginx Dockerfiles, prefer the Node build + Kaniko image flow because it preserves the frontend artifact handoff.
 
 ## Workflow
 
 1. Inspect the target project.
-2. Identify language, package manager/build tool, Java/JDK version when applicable, test command, Docker/image strategy, deployment target, and branch policy.
+2. Identify language, package manager/build tool, Java/JDK or Node.js version when applicable, test command, Docker/image strategy, deployment target, and branch policy.
 3. Ask at most one short clarification if a required choice is missing.
 4. Generate or update `.gitlab-ci.yml` with the minimum stages needed.
 5. List required GitLab CI/CD variables and assumptions.
@@ -32,7 +32,8 @@ Common signals:
 - Java Maven: `pom.xml`, `mvnw`, `.mvn/wrapper/`.
 - Java/JDK version: Maven `pom.xml` properties such as `java.version`, `maven.compiler.source`, `maven.compiler.target`, `maven.compiler.release`, Spring Boot parent conventions, `.java-version`, `Dockerfile` base images, and README/build documentation. Prefer explicit Maven compiler settings when present.
 - Java Gradle: `build.gradle`, `build.gradle.kts`, `gradlew`.
-- Node.js: `package.json`, lockfiles, scripts.
+- Node.js: `package.json`, lockfiles, scripts, `engines.node`, `volta.node`, `.nvmrc`, `.node-version`.
+- Vue frontend: `vue.config.js`, `vite.config.*`, `nuxt.config.*`, dependencies such as `vue`, `@vue/cli-service`, `vite`, or `nuxt`, and build output settings such as Vue CLI `outputDir` or Vite `build.outDir`.
 - Python: `pyproject.toml`, `requirements.txt`, `poetry.lock`, `Pipfile`.
 - Go: `go.mod`.
 - Docker: `Dockerfile`, `build/Dockerfile`, docker compose files.
@@ -69,6 +70,8 @@ stages:
 ```
 
 For Java Maven services, the normal pipeline shape is `package -> image -> deploy`: build the JAR, build/push the image, then update the Kubernetes Deployment image with `kubectl set image`. Use this end-to-end flow by default when the project has a Dockerfile or deployment convention and the user does not explicitly say CI-only/no-deploy.
+
+For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image on `develop`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `develop` can deploy, `release-*` builds images but skips deploy, and other branches are skipped when this environment's policy applies.
 
 If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For non-Java projects, keep using the smallest stage set that matches the request and project evidence.
 
@@ -107,122 +110,16 @@ rules:
 
 Ask before applying this policy to another project unless the user says to reuse this repository's behavior.
 
-## Build Tool Templates
+## Build Tool References
 
-Use these as starting points and adapt to the target project's actual commands.
+After identifying the project language/build tool, read `references/build-tools.md` for the relevant section and adapt its template to the target project:
 
-### Java Maven
+- Java Maven: Maven wrapper, CI Maven settings, JDK 8/17 image selection, single-module and multi-module package jobs.
+- Node.js: package manager selection from lockfiles, Node version detection, and build jobs; test/lint jobs are optional and not generated by default.
+- Vue/Node.js Static Frontend: Vue CLI/Vite static asset builds, `dist/` artifact handoff, nginx Dockerfile patterns, and Kaniko image jobs.
+- Python and Go: lightweight test templates.
 
-Use Maven Wrapper when present:
-
-Maven builds in this environment must use the CI-provided Maven settings file because repository credentials and other required configuration live there. Include `-s $MAVEN_SETTINGS_XML` in every Maven command, and add a fail-fast check for `MAVEN_SETTINGS_XML` before running Maven.
-
-Before choosing the Maven build image, detect the project's JDK version from concrete files. Use these images for Maven package/test jobs:
-
-- JDK 8: `image.server:8082/library/maven:3.8.6-openjdk-8`
-- JDK 17: `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
-
-If the JDK version is ambiguous, ask one short clarification instead of guessing. Do not use the public Maven image when the project is clearly JDK 8 or JDK 17.
-
-```yaml
-image: image.server:8082/library/maven:3.8.6-openjdk-8
-
-variables:
-  MAVEN_USER_HOME: "$CI_PROJECT_DIR/.m2"
-  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository -Dfile.encoding=UTF-8"
-  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
-
-cache:
-  key: "$CI_PROJECT_NAME-maven"
-  paths:
-    - .m2/repository/
-    - .m2/wrapper/
-
-before_script:
-  - mkdir -p .m2
-  - chmod +x ./mvnw
-  - ': "${MAVEN_SETTINGS_XML:?MAVEN_SETTINGS_XML is required}"'
-```
-
-Single-module package job:
-
-```yaml
-package:
-  stage: package
-  script:
-    - ./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" clean package -DskipTests
-  artifacts:
-    paths:
-      - target/*.jar
-```
-
-Multi-module package job:
-
-```yaml
-package:<short-name>:
-  stage: package
-  variables:
-    MODULE_NAME: <module-directory>
-  script:
-    - ./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests
-  artifacts:
-    paths:
-      - <module-directory>/target/*.jar
-```
-
-Do not set `artifacts.expire_in` unless the user asks for a specific retention period; omitted artifact expiration should follow the GitLab default artifact expiration policy.
-
-If using this repository's Dockerfile pattern, copy the selected JAR into `build/temp/` instead of publishing directly from `target/`.
-
-### Node.js
-
-Infer commands from `package.json` scripts. Typical job:
-
-```yaml
-image: node:20
-
-cache:
-  key:
-    files:
-      - package-lock.json
-  paths:
-    - node_modules/
-
-test:
-  stage: test
-  script:
-    - npm ci
-    - npm test
-```
-
-Use `npm run build` only if a `build` script exists.
-
-### Python
-
-Adapt to the dependency manager present:
-
-```yaml
-image: python:3.11
-
-test:
-  stage: test
-  script:
-    - pip install -r requirements.txt
-    - pytest
-```
-
-For Poetry projects, use `poetry install` and `poetry run pytest`.
-
-### Go
-
-```yaml
-image: golang:1.22
-
-test:
-  stage: test
-  script:
-    - go test ./...
-```
+Keep this body focused on pipeline selection and cross-language policies; put language-specific build expansions in `references/build-tools.md` so new languages can be added without making `SKILL.md` too large.
 
 ## Image Build Options
 
@@ -268,6 +165,8 @@ Only use Docker-in-Docker when the project already uses it or the user requests 
 ## Deploy Options
 
 For Java Maven services, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`. Generate this deploy job by default when using the Java Maven + Kaniko flow unless the user explicitly says not to deploy.
+
+For Vue/Node.js static frontends in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same branch behavior as Java: deploy only from `develop`; skip deploy on `release-*`; skip other branches when the environment branch allow-list is used. Generate this deploy job by default when using the Vue/Node.js static frontend + Kaniko flow unless the user explicitly says not to deploy.
 
 For other project types, generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
 
@@ -408,7 +307,9 @@ notify:deploy:failure:
 
 If the target GitLab Runner cannot pull `image.server:8082/library/curlimages/curl:8.9.1`, replace it with an available internal image that includes curl. Keep the script dependency-free.
 
-## Reference Template From This Repository
+## Reference Templates From This Environment
+
+### Java Maven Service
 
 Use this when the target is a Java Maven service in this environment, or when the user wants the same pattern as this repository:
 
@@ -439,6 +340,33 @@ For each deployable module, generate:
 
 Include `rules.changes` for root build files, wrapper files, Dockerfile, and the service path.
 
+### Vue/Node.js Static Frontend
+
+Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or when the user wants the same frontend build/image pattern:
+
+- Branch workflow: only run pipelines on `develop` and `release-*`; skip every other branch.
+- Stages: `package`, `image`, `deploy`.
+- Normal flow: install Node dependencies, run the frontend build script, publish `dist/` as an artifact, then build/push the nginx image with Kaniko.
+- Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known.
+- Package command: use `npm ci` only with `package-lock.json`; otherwise use `npm install`. Use pnpm/yarn commands only when their lockfiles or project config prove they are used.
+- Build command: use the actual `package.json` build script, usually `npm run build` for Vue CLI.
+- Artifact handoff: keep `dist/` as the package artifact when Vue CLI `outputDir` or Vite `build.outDir` does not override it.
+- Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
+- nginx image pattern: preserve Dockerfiles that use internal nginx bases such as `image.server:8082/nledu-cloud/nginx:1.14.2` and copy `dist` plus nginx config.
+- Image tag: `${CI_COMMIT_REF_NAME}_$(date +%F-%H-%M-%S)`.
+- Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
+- Deploy: use the shared `kubectl set image` job on `develop`; skip `release-*` by default.
+- Release policy: deploy jobs skip `release-*` by default, so release branches only package and build/push images.
+
+For a single frontend app, generate:
+
+- `package:web`
+- `image:web` needing `package:web` artifacts
+- `deploy:web` needing `image:web` dotenv artifacts, with rules that skip `release-*` and allow `develop`
+- matching notification jobs only when notification is requested
+
+Include `rules.changes` for `package.json`, lockfiles, Vue/Vite/Nuxt config files, Dockerfile, nginx config, public assets, and `src/**/*`.
+
 ## Required Variables
 
 List only variables needed by the generated pipeline. Common variables:
@@ -454,6 +382,8 @@ List only variables needed by the generated pipeline. Common variables:
 - `MAVEN_SETTINGS_XML`
 - `WECHAT_WEBHOOK` when publish/deploy/image notification is requested
 
+Frontend-only pipelines usually do not need `MAVEN_SETTINGS_XML`. Add Node package registry variables such as `NPM_CONFIG_REGISTRY`, `NPM_TOKEN`, or project-specific npm authentication only when the project needs private npm packages or the user asks for them.
+
 Never hard-code secrets.
 
 ## Quality Checklist
@@ -465,6 +395,9 @@ Before finishing, verify:
 - `needs` references use exact job names.
 - Artifacts or dotenv files are produced before downstream jobs consume them.
 - Required variables fail fast with shell parameter checks when used in scripts.
+- Node jobs use the package manager and Node version indicated by project files.
+- Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
+- Frontend image jobs receive the built static artifact and use a Kaniko context that includes every path referenced by the Dockerfile.
 - Optional notification jobs reference `WECHAT_WEBHOOK` and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.
 - Branch and deploy behavior match the user's stated environment policy.
