@@ -300,20 +300,22 @@ deploy:
 
 If manifests indicate Helm, Kustomize, Argo CD, or another GitOps flow, do not replace it with `kubectl set image`. Ask whether to generate CI for the existing deployment tool.
 
-## Optional Publish Notification
+## Optional Notification
 
-Only add publish notification jobs when the user explicitly asks for release/publish/deploy notification. Do not add notification by default.
+Only add notification jobs when the user explicitly asks for release/publish/deploy/image notification. Do not add notification by default.
 
 For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT_WEBHOOK` as the webhook URL. Never hard-code the webhook URL or key in `.gitlab-ci.yml`.
 
 Prefer an independent `notify` stage/job over adding notification logic to the kubectl deploy job, because the kubectl image may not include curl or other HTTP clients. Use a curl image available in the target environment. If no curl image is available, use another image that includes curl. Do not require Python or the third-party `requests` package for basic WeCom notification.
 
-When notification is requested, add `notify` after `deploy` in `stages` and generate success/failure notification jobs as needed. Message style should match:
+When notification is requested, add `notify` after `deploy` in `stages` and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `develop`, and generate image build success/failure notification for `release-*` because release branches build images but skip deployment by default. On `develop`, a package, image, or deploy failure should trigger the deploy failure notification. On `release-*`, a package or image failure should trigger the image build failure notification. Message style should match:
 
-- Success: `开发环境发布通知\n<project>:<tag>发布成功`
-- Failure: `开发环境发布通知\n<project>:<tag>发布失败`
+- Deploy success: `开发环境发布通知\n<project>:<tag>发布成功`
+- Deploy failure: `开发环境发布通知\n<project>:<tag>发布失败`
+- Image success: `镜像构建通知\n<project>:<tag>构建成功`
+- Image failure: `镜像构建通知\n<project>:<tag>构建失败`
 
-Use the image tag or `IMAGE_URL` from the image job when available; otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`.
+Use the image tag or `IMAGE_URL` from the image job when available; otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. This fallback matters for `develop` package or image failures, where `IMAGE_URL` may not have been produced yet.
 
 Example notification job pattern:
 
@@ -324,6 +326,44 @@ stages:
   - deploy
   - notify
 
+notify:image:success:
+  stage: notify
+  image:
+    name: image.server:8082/library/curlimages/curl:8.9.1
+    entrypoint: [""]
+  cache: []
+  needs:
+    - job: image
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+  script:
+    - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
+    - |
+      TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
+      CONTENT="镜像构建通知\n${CI_PROJECT_NAME}:${TAG}构建成功"
+      curl -fsS -X POST "$WECHAT_WEBHOOK" \
+        -H 'Content-Type: application/json' \
+        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
+
+notify:image:failure:
+  stage: notify
+  image:
+    name: image.server:8082/library/curlimages/curl:8.9.1
+    entrypoint: [""]
+  cache: []
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+      when: on_failure
+  script:
+    - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
+    - |
+      TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
+      CONTENT="镜像构建通知\n${CI_PROJECT_NAME}:${TAG}构建失败"
+      curl -fsS -X POST "$WECHAT_WEBHOOK" \
+        -H 'Content-Type: application/json' \
+        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
+
 notify:deploy:success:
   stage: notify
   image:
@@ -333,7 +373,11 @@ notify:deploy:success:
   needs:
     - job: deploy
       artifacts: false
-  when: on_success
+    - job: image
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
@@ -349,7 +393,9 @@ notify:deploy:failure:
     name: image.server:8082/library/curlimages/curl:8.9.1
     entrypoint: [""]
   cache: []
-  when: on_failure
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_failure
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
@@ -368,7 +414,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 
 - Branch workflow: only run pipelines on `develop` and `release-*`; skip every other branch.
 - Stages: `package`, `image`, `deploy`.
-- Optional notification stage: add `notify` only when the user asks for publish/deploy notification.
+- Optional notification stage: add `notify` only when the user asks for publish/deploy/image notification.
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
@@ -377,7 +423,8 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
-- Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using an independent curl notification job.
+- Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using independent curl notification jobs.
+- Release image notification: when notification is requested and following this repository's branch policy, `release-*` sends image build success notification after image build succeeds and image build failure notification when package or image fails because deploy is skipped.
 - Release policy: deploy jobs skip `release-*` by default.
 
 For each deployable module, generate:
@@ -385,6 +432,10 @@ For each deployable module, generate:
 - `package:<short-name>`
 - `image:<short-name>` needing `package:<short-name>` artifacts
 - `deploy:<short-name>` needing `image:<short-name>` dotenv artifacts
+- `notify:image:<short-name>:success` needing `image:<short-name>` dotenv artifacts for `release-*` image build success notification when notification is requested
+- `notify:image:<short-name>:failure` for `release-*` image build failure notification when notification is requested
+- `notify:deploy:<short-name>:success` needing `deploy:<short-name>` and `image:<short-name>` dotenv artifacts for `develop` deploy success notification when notification is requested
+- `notify:deploy:<short-name>:failure` for `develop` deploy failure notification when notification is requested
 
 Include `rules.changes` for root build files, wrapper files, Dockerfile, and the service path.
 
@@ -401,7 +452,7 @@ List only variables needed by the generated pipeline. Common variables:
 - `KUBE_DEPLOYMENT`
 - `KUBE_CONTAINER`
 - `MAVEN_SETTINGS_XML`
-- `WECHAT_WEBHOOK` when publish/deploy notification is requested
+- `WECHAT_WEBHOOK` when publish/deploy/image notification is requested
 
 Never hard-code secrets.
 
