@@ -77,6 +77,8 @@ Detect Node.js version from `package.json` `volta.node`, `engines.node`, `.nvmrc
 
 Cache npm's package download cache, not `node_modules/`. Caching `.npm/` works well with `npm ci` because installs stay clean while downloaded packages can be reused. Avoid caching `node_modules/` by default because it can preserve stale installed dependencies, break across Node/Alpine image changes, and waste time when `npm ci` deletes it before reinstalling.
 
+Use `https://registry.npmmirror.com` as the default npm registry for Node/Vue build jobs in this environment. Set it with `NPM_CONFIG_REGISTRY` in the job variables so commands do not need repeated `--registry` flags. If the project uses a private npm registry, scoped packages, or an existing `.npmrc`, preserve the project-specific registry/auth settings instead of overriding them with npmmirror.
+
 Do not generate Node test jobs by default in this environment. Add `npm test`, `npm run lint`, or equivalent only when the user explicitly asks for test/lint CI gates or the project's existing CI policy clearly requires them.
 
 Use `npm run build` only if a `build` script exists.
@@ -99,6 +101,7 @@ package:web:
   image: image.server:8082/library/node:14.18.0
   variables:
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
+    NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"
   cache:
     key:
       prefix: "$CI_PROJECT_NAME-web-npm"

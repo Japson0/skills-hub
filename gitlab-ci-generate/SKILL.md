@@ -349,6 +349,7 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Normal flow: install Node dependencies, run the frontend build script, publish `dist/` as an artifact, then build/push the nginx image with Kaniko.
 - Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known.
 - Package command: use `npm ci` only with `package-lock.json`; otherwise use `npm install`. Use pnpm/yarn commands only when their lockfiles or project config prove they are used.
+- npm registry: default to `NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"` for Node/Vue build jobs unless the project has private registry or `.npmrc` settings that must be preserved.
 - Build command: use the actual `package.json` build script, usually `npm run build` for Vue CLI.
 - Artifact handoff: keep `dist/` as the package artifact when Vue CLI `outputDir` or Vite `build.outDir` does not override it.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
@@ -382,7 +383,7 @@ List only variables needed by the generated pipeline. Common variables:
 - `MAVEN_SETTINGS_XML`
 - `WECHAT_WEBHOOK` when publish/deploy/image notification is requested
 
-Frontend-only pipelines usually do not need `MAVEN_SETTINGS_XML`. Add Node package registry variables such as `NPM_CONFIG_REGISTRY`, `NPM_TOKEN`, or project-specific npm authentication only when the project needs private npm packages or the user asks for them.
+Frontend-only pipelines usually do not need `MAVEN_SETTINGS_XML`. Node/Vue jobs default `NPM_CONFIG_REGISTRY` to `https://registry.npmmirror.com`. Add or preserve `NPM_TOKEN`, scoped registry variables, or project-specific npm authentication only when the project needs private npm packages or already has `.npmrc` settings.
 
 Never hard-code secrets.
 
@@ -397,6 +398,7 @@ Before finishing, verify:
 - Required variables fail fast with shell parameter checks when used in scripts.
 - Node jobs use the package manager and Node version indicated by project files.
 - Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
+- Node/Vue npm jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.
 - Frontend image jobs receive the built static artifact and use a Kaniko context that includes every path referenced by the Dockerfile.
 - Optional notification jobs reference `WECHAT_WEBHOOK` and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.
