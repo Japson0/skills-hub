@@ -142,7 +142,7 @@ image:web:
       {"auths":{"$DOCKER_REGISTRY":{"username":"$CI_REGISTRY_USER","password":"$CI_REGISTRY_PASSWORD"}}}
       EOF
     - |
-      IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)"
+      IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)"
       IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
       /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/lib/Dockerfile" --destination "$IMAGE_URL" --insecure-pull --insecure
       echo "IMAGE_URL=$IMAGE_URL" > build.env
