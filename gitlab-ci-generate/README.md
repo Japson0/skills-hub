@@ -170,7 +170,7 @@ npm 缓存策略：
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
 - 通知是可选能力，只有用户明确要求发布/部署/镜像通知时才生成通知 job。
 - `develop` 分支发布成功后发送发布成功通知；`develop` 分支 package、image 或 deploy 任一失败都会发送发布失败通知；`release-*` 分支默认跳过部署，但镜像构建成功或失败都会发送镜像构建通知。
-- 企业微信发布通知使用 GitLab CI/CD Variable `WECHAT_WEBHOOK` 保存 webhook URL，不在 `.gitlab-ci.yml` 中硬编码 webhook 地址或 key。
+- 企业微信发布通知使用 GitLab CI/CD Variable `WECHAT_WEBHOOK` 保存 webhook URL，不在 `.gitlab-ci.yml` 中硬编码 webhook 地址或 key；text 消息 payload 默认带 `"mentioned_list":["${GITLAB_USER_LOGIN}"]`，通知触发流水线的用户。
 - 通知 job 默认独立放在 `notify` stage，使用 `curl` 发送 HTTP 请求，不依赖 Python 或第三方 `requests` 包。
 - 默认 workflow 只允许 `develop` 和 `release-*` 分支启动流水线，其他分支都跳过。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
@@ -190,10 +190,10 @@ npm 缓存策略：
 
 ```text
 开发环境发布通知
-<项目名>:<镜像或分支>发布失败
+<项目或模块名>:<分支>发布失败
 ```
 
-在 `develop` 分支，package、image 或 deploy 任一阶段失败都会触发发布失败通知。如果 image 阶段未产出 `IMAGE_URL`，通知中的镜像或分支会回退为 Git tag 或分支名。
+在 `develop` 分支，package、image 或 deploy 任一阶段失败都会触发发布失败通知。发布失败通知优先使用模块名，没有模块名时使用项目名，并使用分支名，例如 `tpsp-monorepo-client:develop发布失败`，不使用镜像 tag 或 `IMAGE_URL`。
 
 对于默认只构建镜像、不部署的 `release-*` 分支，镜像构建成功后会发送：
 
@@ -209,7 +209,7 @@ npm 缓存策略：
 <项目名>:<镜像或分支>构建失败
 ```
 
-企业微信 webhook URL 通过 `WECHAT_WEBHOOK` 变量读取，例如在 GitLab 项目的 CI/CD Variables 中配置 `WECHAT_WEBHOOK`。默认 curl 镜像使用 `image.server:8082/library/curlimages/curl:8.9.1`；如果运行环境不能拉取该镜像，需要替换为其他可用的内网 curl 镜像，或其他包含 `curl` 命令的镜像。
+企业微信 webhook URL 通过 `WECHAT_WEBHOOK` 变量读取，例如在 GitLab 项目的 CI/CD Variables 中配置 `WECHAT_WEBHOOK`。text 消息 payload 默认带 `"mentioned_list":["${GITLAB_USER_LOGIN}"]`，用于通知触发流水线的用户。默认 curl 镜像使用 `image.server:8082/library/curlimages/curl:8.9.1`；如果运行环境不能拉取该镜像，需要替换为其他可用的内网 curl 镜像，或其他包含 `curl` 命令的镜像。
 
 ## 常见变量
 

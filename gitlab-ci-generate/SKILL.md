@@ -153,7 +153,7 @@ image:
       {"auths":{"$DOCKER_REGISTRY":{"username":"$CI_REGISTRY_USER","password":"$CI_REGISTRY_PASSWORD"}}}
       EOF
     - |
-      IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)"
+      IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)"
       IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
       /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE_URL" --insecure-pull --insecure
       echo "IMAGE_URL=$IMAGE_URL" > build.env
@@ -209,18 +209,18 @@ If manifests indicate Helm, Kustomize, Argo CD, or another GitOps flow, do not r
 
 Only add notification jobs when the user explicitly asks for release/publish/deploy/image notification. Do not add notification by default.
 
-For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT_WEBHOOK` as the webhook URL. Never hard-code the webhook URL or key in `.gitlab-ci.yml`.
+For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT_WEBHOOK` as the webhook URL. Never hard-code the webhook URL or key in `.gitlab-ci.yml`. Include `mentioned_list` with `GITLAB_USER_LOGIN` in every text message payload so the pipeline trigger user is notified, for example `"mentioned_list":["${GITLAB_USER_LOGIN}"]`.
 
 Prefer an independent `notify` stage/job over adding notification logic to the kubectl deploy job, because the kubectl image may not include curl or other HTTP clients. Use a curl image available in the target environment. If no curl image is available, use another image that includes curl. Do not require Python or the third-party `requests` package for basic WeCom notification.
 
 When notification is requested, add `notify` after `deploy` in `stages` and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `develop`, and generate image build success/failure notification for `release-*` because release branches build images but skip deployment by default. On `develop`, a package, image, or deploy failure should trigger the deploy failure notification. On `release-*`, a package or image failure should trigger the image build failure notification. Message style should match:
 
 - Deploy success: `开发环境发布通知\n<project>:<tag>发布成功`
-- Deploy failure: `开发环境发布通知\n<project>:<tag>发布失败`
+- Deploy failure: `开发环境发布通知\n<project>:<branch>发布失败`
 - Image success: `镜像构建通知\n<project>:<tag>构建成功`
 - Image failure: `镜像构建通知\n<project>:<tag>构建失败`
 
-Use the image tag or `IMAGE_URL` from the image job when available; otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. This fallback matters for `develop` package or image failures, where `IMAGE_URL` may not have been produced yet.
+Use the image tag or `IMAGE_URL` for image build notifications and deploy success notifications when available; otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. For deploy failure notifications on `develop`, use the branch name (`CI_COMMIT_REF_NAME`) instead of the image tag, because package or image failures may happen before an image exists and the user needs to see which environment/branch failed. If a generated pipeline has `MODULE_NAME`, use it as the notification subject; otherwise use `CI_PROJECT_NAME`.
 
 Example notification job pattern:
 
@@ -249,7 +249,7 @@ notify:image:success:
       CONTENT="镜像构建通知\n${CI_PROJECT_NAME}:${TAG}构建成功"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
-        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
+        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
 
 notify:image:failure:
   stage: notify
@@ -267,7 +267,7 @@ notify:image:failure:
       CONTENT="镜像构建通知\n${CI_PROJECT_NAME}:${TAG}构建失败"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
-        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
+        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
 
 notify:deploy:success:
   stage: notify
@@ -290,7 +290,7 @@ notify:deploy:success:
       CONTENT="开发环境发布通知\n${CI_PROJECT_NAME}:${TAG}发布成功"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
-        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
+        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
 
 notify:deploy:failure:
   stage: notify
@@ -304,11 +304,11 @@ notify:deploy:failure:
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
-      TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
-      CONTENT="开发环境发布通知\n${CI_PROJECT_NAME}:${TAG}发布失败"
+      SUBJECT="${MODULE_NAME:-$CI_PROJECT_NAME}"
+      CONTENT="开发环境发布通知\n${SUBJECT}:${CI_COMMIT_REF_NAME}发布失败"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
-        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\"}}"
+        -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
 ```
 
 If the target GitLab Runner cannot pull `image.server:8082/library/curlimages/curl:8.9.1`, replace it with an available internal image that includes curl. Keep the script dependency-free.
@@ -326,7 +326,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, `--insecure-pull`, and `--insecure`.
-- Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)`.
+- Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
@@ -360,7 +360,7 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Artifact handoff: keep `dist/` as the package artifact when Vue CLI `outputDir` or Vite `build.outDir` does not override it.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
 - nginx image pattern: preserve Dockerfiles that use internal nginx bases such as `image.server:8082/nledu-cloud/nginx:1.14.2` and copy `dist` plus nginx config.
-- Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=Asia/Shanghai date +%F-%H-%M-%S)`.
+- Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
 - Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
 - Deploy: use the shared `kubectl set image` job on `develop`; skip `release-*` by default.
 - Release policy: deploy jobs skip `release-*` by default, so release branches only package and build/push images.
@@ -407,7 +407,7 @@ Before finishing, verify:
 - Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
 - Node/Vue npm jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.
 - Frontend image jobs receive the built static artifact and use a Kaniko context that includes every path referenced by the Dockerfile.
-- Optional notification jobs reference `WECHAT_WEBHOOK` and never hard-code webhook URLs or keys.
+- Optional notification jobs reference `WECHAT_WEBHOOK`, include `mentioned_list` with `GITLAB_USER_LOGIN`, and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.
 - Branch and deploy behavior match the user's stated environment policy.
 - Secrets are referenced as CI variables, never hard-coded.
