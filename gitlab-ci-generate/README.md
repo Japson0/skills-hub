@@ -183,7 +183,7 @@ npm 缓存策略：
 
 ```text
 开发环境发布通知
-<项目名>:<镜像或分支>发布成功
+<项目或模块名>:<镜像 tag>发布成功
 ```
 
 失败时会发送：
@@ -195,18 +195,20 @@ npm 缓存策略：
 
 在 `develop` 分支，package、image 或 deploy 任一阶段失败都会触发发布失败通知。发布失败通知优先使用模块名，没有模块名时使用项目名，并使用分支名，例如 `tpsp-monorepo-client:develop发布失败`，不使用镜像 tag 或 `IMAGE_URL`。
 
+发布成功和镜像构建通知展示镜像 tag，不展示完整 `IMAGE_URL`。例如应生成 `tpsp-monorepo-client-admin:release-1.8.0-mjsz_2026-05-21-14-11-55`，而不是 `nledu-cloud-operatation-analysis:image.server:8082/nledu-cloud/nledu-cloud-operatation-analysis:release-1.0.0_2026-05-21-06-10-42`。生成的 image job 会把 `IMAGE_URL` 和 `IMAGE_TAG` 都写入 `build.env`：deploy 使用 `IMAGE_URL`，通知展示 `IMAGE_TAG`。
+
 对于默认只构建镜像、不部署的 `release-*` 分支，镜像构建成功后会发送：
 
 ```text
 镜像构建通知
-<项目名>:<镜像或分支>构建成功
+<项目或模块名>:<镜像 tag>构建成功
 ```
 
 如果 `release-*` 分支 package 或 image 阶段失败，会发送：
 
 ```text
 镜像构建通知
-<项目名>:<镜像或分支>构建失败
+<项目或模块名>:<镜像 tag 或分支>构建失败
 ```
 
 企业微信 webhook URL 通过 `WECHAT_WEBHOOK` 变量读取，例如在 GitLab 项目的 CI/CD Variables 中配置 `WECHAT_WEBHOOK`。text 消息 payload 默认带 `"mentioned_list":["${GITLAB_USER_LOGIN}"]`，用于通知触发流水线的用户。默认 curl 镜像使用 `image.server:8082/library/curlimages/curl:8.9.1`；如果运行环境不能拉取该镜像，需要替换为其他可用的内网 curl 镜像，或其他包含 `curl` 命令的镜像。

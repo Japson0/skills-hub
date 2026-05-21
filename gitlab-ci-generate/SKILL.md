@@ -156,7 +156,7 @@ image:
       IMAGE_TAG="${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)"
       IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
       /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE_URL" --insecure-pull --insecure
-      echo "IMAGE_URL=$IMAGE_URL" > build.env
+      printf 'IMAGE_URL=%s\nIMAGE_TAG=%s\n' "$IMAGE_URL" "$IMAGE_TAG" > build.env
   artifacts:
     reports:
       dotenv: build.env
@@ -215,12 +215,12 @@ Prefer an independent `notify` stage/job over adding notification logic to the k
 
 When notification is requested, add `notify` after `deploy` in `stages` and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `develop`, and generate image build success/failure notification for `release-*` because release branches build images but skip deployment by default. On `develop`, a package, image, or deploy failure should trigger the deploy failure notification. On `release-*`, a package or image failure should trigger the image build failure notification. Message style should match:
 
-- Deploy success: `开发环境发布通知\n<project>:<tag>发布成功`
+- Deploy success: `开发环境发布通知\n<project-or-module>:<tag>发布成功`
 - Deploy failure: `开发环境发布通知\n<project>:<branch>发布失败`
-- Image success: `镜像构建通知\n<project>:<tag>构建成功`
-- Image failure: `镜像构建通知\n<project>:<tag>构建失败`
+- Image success: `镜像构建通知\n<project-or-module>:<tag>构建成功`
+- Image failure: `镜像构建通知\n<project-or-module>:<tag>构建失败`
 
-Use the image tag or `IMAGE_URL` for image build notifications and deploy success notifications when available; otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. For deploy failure notifications on `develop`, use the branch name (`CI_COMMIT_REF_NAME`) instead of the image tag, because package or image failures may happen before an image exists and the user needs to see which environment/branch failed. If a generated pipeline has `MODULE_NAME`, use it as the notification subject; otherwise use `CI_PROJECT_NAME`.
+Use the image tag for image build notifications and deploy success notifications, not the full image URL. Prefer the dotenv `IMAGE_TAG` produced by the image job. If only `IMAGE_URL` is available, derive the display tag with `${IMAGE_URL##*:}`. Otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. If a generated pipeline has `MODULE_NAME`, use it as the notification subject; otherwise use `CI_PROJECT_NAME`. For example, prefer `tpsp-monorepo-client-admin:release-1.8.0-mjsz_2026-05-21-14-11-55`, not `nledu-cloud-operatation-analysis:image.server:8082/nledu-cloud/nledu-cloud-operatation-analysis:release-1.0.0_2026-05-21-06-10-42`. For deploy failure notifications on `develop`, use the branch name (`CI_COMMIT_REF_NAME`) instead of the image tag, because package or image failures may happen before an image exists and the user needs to see which environment/branch failed.
 
 Example notification job pattern:
 
@@ -245,8 +245,10 @@ notify:image:success:
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
-      TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
-      CONTENT="镜像构建通知\n${CI_PROJECT_NAME}:${TAG}构建成功"
+      TAG="${IMAGE_TAG:-${IMAGE_URL##*:}}"
+      TAG="${TAG:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
+      SUBJECT="${MODULE_NAME:-$CI_PROJECT_NAME}"
+      CONTENT="镜像构建通知\n${SUBJECT}:${TAG}构建成功"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
         -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
@@ -263,8 +265,10 @@ notify:image:failure:
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
-      TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
-      CONTENT="镜像构建通知\n${CI_PROJECT_NAME}:${TAG}构建失败"
+      TAG="${IMAGE_TAG:-${IMAGE_URL##*:}}"
+      TAG="${TAG:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
+      SUBJECT="${MODULE_NAME:-$CI_PROJECT_NAME}"
+      CONTENT="镜像构建通知\n${SUBJECT}:${TAG}构建失败"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
         -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
@@ -286,8 +290,10 @@ notify:deploy:success:
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
-      TAG="${IMAGE_URL:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
-      CONTENT="开发环境发布通知\n${CI_PROJECT_NAME}:${TAG}发布成功"
+      TAG="${IMAGE_TAG:-${IMAGE_URL##*:}}"
+      TAG="${TAG:-${CI_COMMIT_TAG:-$CI_COMMIT_REF_NAME}}"
+      SUBJECT="${MODULE_NAME:-$CI_PROJECT_NAME}"
+      CONTENT="开发环境发布通知\n${SUBJECT}:${TAG}发布成功"
       curl -fsS -X POST "$WECHAT_WEBHOOK" \
         -H 'Content-Type: application/json' \
         -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$CONTENT\",\"mentioned_list\":[\"${GITLAB_USER_LOGIN}\"]}}"
@@ -327,7 +333,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, `--insecure-pull`, and `--insecure`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
-- Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
+- Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
 - Deploy: `kubectl set image` and `kubectl rollout status`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
 - Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using independent curl notification jobs.
@@ -361,7 +367,7 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
 - nginx image pattern: preserve Dockerfiles that use internal nginx bases such as `image.server:8082/nledu-cloud/nginx:1.14.2` and copy `dist` plus nginx config.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
-- Image URL dotenv artifact: write `IMAGE_URL=...` to `build.env`.
+- Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
 - Deploy: use the shared `kubectl set image` job on `develop`; skip `release-*` by default.
 - Release policy: deploy jobs skip `release-*` by default, so release branches only package and build/push images.
 
