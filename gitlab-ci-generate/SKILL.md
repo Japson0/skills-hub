@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.15"
+  version: "1.16"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `develop`; `release-*` builds images but skips deployment.
@@ -365,6 +365,7 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known. When project evidence requires a high Node.js version, such as Node 20+ from `engines.node`, `.nvmrc`, `.node-version`, Volta, Vite/Nuxt docs, or dependency requirements, use `image.server:8082/library/node:22.19.0` by default.
 - Package command: use `npm ci` only with `package-lock.json`; otherwise use `npm install`. Use pnpm/yarn commands only when their lockfiles or project config prove they are used.
 - npm/pnpm registry: default Node/Vue npm and pnpm installs to `https://registry.npmmirror.com` unless the project has private registry or `.npmrc` settings that must be preserved. Set `NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"` for npm-compatible tools, and for pnpm install commands also pass `--registry=https://registry.npmmirror.com` explicitly.
+- Husky: disable Git hooks during CI dependency installation with `HUSKY: "0"` in Node/Vue package jobs. This avoids `prepare` scripts or Husky install steps failing in GitLab CI environments where hooks are irrelevant.
 - Build command: use the actual `package.json` build script, usually `npm run build` for Vue CLI.
 - Artifact handoff: keep `dist/` as the package artifact when Vue CLI `outputDir` or Vite `build.outDir` does not override it.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
@@ -416,6 +417,7 @@ Before finishing, verify:
 - Node jobs use the package manager and Node version indicated by project files.
 - Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
 - Node/Vue npm and pnpm install jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.
+- Node/Vue package jobs set `HUSKY: "0"` to disable Husky hooks during CI dependency installation.
 - Frontend image jobs receive the built static artifact and use a Kaniko context that includes every path referenced by the Dockerfile.
 - Optional notification jobs reference `WECHAT_WEBHOOK`, include `mentioned_list` with `GITLAB_USER_LOGIN`, and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.

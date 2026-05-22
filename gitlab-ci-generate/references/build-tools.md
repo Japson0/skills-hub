@@ -73,6 +73,8 @@ Infer commands from `package.json` scripts and lockfiles. Prefer the package man
 - `pnpm-lock.yaml`: enable Corepack if needed, then `pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com` unless project-specific registry settings must be preserved.
 - `yarn.lock`: use `yarn install --frozen-lockfile` for Yarn classic, or Corepack for modern Yarn if the project indicates it.
 
+Set `HUSKY=0` in Node/Vue package jobs so npm/pnpm/yarn dependency installation does not fail because of Husky `prepare` scripts or Git hook setup. Hooks are not needed in CI package jobs.
+
 Detect Node.js version from `package.json` `volta.node`, `engines.node`, `.nvmrc`, `.node-version`, Dockerfile base images, and README/build docs. If the project pins Node 14, use an internal Node 14 image when available, such as `image.server:8082/library/node:14.18.0` or another confirmed internal equivalent. When project evidence requires a high Node.js version, such as Node 20+ from `engines.node`, `.nvmrc`, `.node-version`, Volta, Vite/Nuxt docs, or dependency requirements, use `image.server:8082/library/node:22.19.0` by default. Ask one short clarification if the required Node version is ambiguous and likely to affect the build.
 
 Cache npm's package download cache, not `node_modules/`. Caching `.npm/` works well with `npm ci` because installs stay clean while downloaded packages can be reused. Avoid caching `node_modules/` by default because it can preserve stale installed dependencies, break across Node/Alpine image changes, and waste time when `npm ci` deletes it before reinstalling.
@@ -100,6 +102,7 @@ package:web:
   stage: package
   image: image.server:8082/library/node:14.18.0
   variables:
+    HUSKY: "0"
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
     NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"
   cache:
@@ -117,7 +120,7 @@ package:web:
       - dist/
 ```
 
-If there is no `package-lock.json`, use `npm install --cache .npm --prefer-offline` rather than `npm ci`. For pnpm projects, use `pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com` unless project-specific registry settings must be preserved. Do not add `npm run lint` or `npm run test:unit` by default for legacy Vue projects unless the user requests CI gates or the existing project already requires them.
+If there is no `package-lock.json`, use `npm install --cache .npm --prefer-offline` rather than `npm ci`. For pnpm projects, use `pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com` unless project-specific registry settings must be preserved. Set `HUSKY: "0"` in the package job variables for npm, pnpm, and yarn projects. Do not add `npm run lint` or `npm run test:unit` by default for legacy Vue projects unless the user requests CI gates or the existing project already requires them.
 
 For nginx image Dockerfiles like this environment's frontend projects, keep the existing artifact handoff: build `dist/` in the package job, pass it to Kaniko as an artifact, and point Kaniko at the Dockerfile that copies `dist` and nginx config. Example:
 

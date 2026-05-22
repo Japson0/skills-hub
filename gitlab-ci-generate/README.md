@@ -145,6 +145,7 @@ npm 缓存策略：
 - 默认缓存 npm 包下载缓存 `.npm/`
 - 默认不缓存 `node_modules/`
 - 默认 npm/pnpm 安装都使用 `https://registry.npmmirror.com` 淘宝镜像源；pnpm install 命令显式追加 `--registry=https://registry.npmmirror.com`
+- Node/Vue package job 默认设置 `HUSKY=0`，避免 Husky `prepare` 或 Git hooks 安装在 CI 里导致依赖安装失败
 - 有 `package-lock.json` 时使用 `npm ci --cache .npm --prefer-offline`
 - 没有 `package-lock.json` 时使用 `npm install --cache .npm --prefer-offline`
 - 只有用户明确要求时，才考虑缓存 `node_modules/`
@@ -164,6 +165,7 @@ npm 缓存策略：
 - Node/Vue 默认不生成测试或 lint job；只有用户明确要求或项目已有明确 CI 规则时才生成。
 - Node/Vue 默认缓存 `.npm/` 包下载缓存，不缓存 `node_modules/`。
 - Node/Vue 默认使用 `https://registry.npmmirror.com` 作为 npm/pnpm 安装源；如果项目使用私有 npm 仓库或 `.npmrc`，优先保留项目配置。
+- Node/Vue package job 默认设置 `HUSKY=0`，CI 中不安装或执行 Husky hooks。
 - 默认不设置 `artifacts.expire_in`，所有产物过期时间使用 GitLab 系统/项目默认设置；只有用户明确要求具体保留时间时才生成 `artifacts.expire_in`。
 - Kaniko image job 使用内网镜像 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`。
 - Kaniko executor 命令带 `--insecure-pull --insecure`，允许构建镜像时从 HTTP registry 拉取基础镜像并推送到 HTTP registry。
