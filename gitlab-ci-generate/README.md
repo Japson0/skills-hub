@@ -75,7 +75,7 @@ Java Maven 模板适用于：
 - JDK 8 Maven job 使用 `image.server:8082/library/maven:3.8.6-openjdk-8`
 - JDK 17 Maven job 使用 `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
 - 使用 Kaniko 构建 Docker 镜像，Kaniko job 镜像使用 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`，并带 `--insecure-pull --insecure` 允许从 HTTP 仓库拉取基础镜像并推送镜像
-- 使用 `kubectl set image` 发布到 Kubernetes，kubectl job 镜像使用 `image.server:8082/library/bitnami/kubectl:1.28`
+- 使用 `kubectl set image` 发布到 Kubernetes，kubectl job 镜像使用 `image.server:8082/library/bitnami/kubectl:1.28`，并给 `kubectl rollout status` 设置默认 `60s` 超时，避免容器启动失败时 deploy 阶段一直等待
 
 Java Maven 模板的核心流程：
 
@@ -113,6 +113,7 @@ Vue/Node.js 前端模板适用于：
 - Dockerfile 将 `dist/` 和 nginx 配置复制进 nginx 镜像，例如 `lib/Dockerfile` + `lib/nginx.conf`
 - 使用 Kaniko 构建镜像
 - 使用 `kubectl set image` 更新 Kubernetes Deployment 镜像
+- `kubectl rollout status` 默认等待 `60s`，可通过 `KUBE_ROLLOUT_TIMEOUT` 覆盖，避免容器启动失败时 deploy job 长时间卡住
 
 Vue/Node.js 前端模板的核心流程：
 
@@ -168,6 +169,7 @@ npm 缓存策略：
 - Kaniko executor 命令带 `--insecure-pull --insecure`，允许构建镜像时从 HTTP registry 拉取基础镜像并推送到 HTTP registry。
 - Vue/Node.js 前端如果 Dockerfile 同时引用 `dist/` 和 `lib/nginx.conf`，Kaniko context 应使用 `$CI_PROJECT_DIR`，不能只指向 `lib/`。
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
+- kubectl deploy job 必须给 `rollout status` 设置显式超时，默认 `60s`，可通过 `KUBE_ROLLOUT_TIMEOUT` 覆盖。
 - 通知是可选能力，只有用户明确要求发布/部署/镜像通知时才生成通知 job。
 - `develop` 分支发布成功后发送发布成功通知；`develop` 分支 package、image 或 deploy 任一失败都会发送发布失败通知；`release-*` 分支默认跳过部署，但镜像构建成功或失败都会发送镜像构建通知。
 - 企业微信发布通知使用 GitLab CI/CD Variable `WECHAT_WEBHOOK` 保存 webhook URL，不在 `.gitlab-ci.yml` 中硬编码 webhook 地址或 key；text 消息 payload 默认带 `"mentioned_list":["${GITLAB_USER_LOGIN}"]`，通知触发流水线的用户。
@@ -222,6 +224,7 @@ npm 缓存策略：
 - `KUBECONFIG_FILE`
 - `KUBE_DEPLOYMENT`
 - `KUBE_CONTAINER`
+- `KUBE_ROLLOUT_TIMEOUT`：可选，默认 `60s`
 - `MAVEN_SETTINGS_XML`
 - `DOCKER_REGISTRY`
 - `CI_REGISTRY_PROJECT`
