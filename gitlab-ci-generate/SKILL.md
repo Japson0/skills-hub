@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.12"
+  version: "1.13"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `develop`; `release-*` builds images but skips deployment.
@@ -196,10 +196,13 @@ deploy:
       : "${KUBE_CONTAINER:?KUBE_CONTAINER is required}"
       : "${IMAGE_URL:?IMAGE_URL is required}"
       : "${KUBECONFIG_FILE:?KUBECONFIG_FILE is required}"
+      KUBE_ROLLOUT_TIMEOUT="${KUBE_ROLLOUT_TIMEOUT:-60s}"
       export KUBECONFIG="$KUBECONFIG_FILE"
     - kubectl -n "$KUBE_NAMESPACE" set image "deployment/$KUBE_DEPLOYMENT" "$KUBE_CONTAINER=$IMAGE_URL"
-    - kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$KUBE_DEPLOYMENT"
+    - kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$KUBE_DEPLOYMENT" --timeout="$KUBE_ROLLOUT_TIMEOUT"
 ```
+
+Always include an explicit `kubectl rollout status --timeout`, defaulting to `60s` with optional `KUBE_ROLLOUT_TIMEOUT` override. This prevents deploy jobs from hanging indefinitely when the updated container cannot start, while still surfacing the rollout failure in GitLab CI.
 
 ### Helm, Kustomize, GitOps
 
@@ -334,7 +337,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, `--insecure-pull`, and `--insecure`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
 - Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
-- Deploy: `kubectl set image` and `kubectl rollout status`.
+- Deploy: `kubectl set image` and `kubectl rollout status --timeout`, defaulting rollout wait time to `60s`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
 - Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using independent curl notification jobs.
 - Release image notification: when notification is requested and following this repository's branch policy, `release-*` sends image build success notification after image build succeeds and image build failure notification when package or image fails because deploy is skipped.
@@ -392,6 +395,7 @@ List only variables needed by the generated pipeline. Common variables:
 - `KUBECONFIG_FILE`
 - `KUBE_DEPLOYMENT`
 - `KUBE_CONTAINER`
+- `KUBE_ROLLOUT_TIMEOUT` optional, defaults to `60s`
 - `MAVEN_SETTINGS_XML`
 - `WECHAT_WEBHOOK` when publish/deploy/image notification is requested
 
