@@ -5,10 +5,10 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.13"
+  version: "1.18"
 ---
 
-Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `develop`; `release-*` builds images but skips deployment.
+Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `release-*`; `hotfix-*` builds images but skips deployment. `develop` does not start pipelines by default.
 
 Treat `gitlab-cli.yml` in user prompts as likely meaning GitLab CI config. The actual file name should normally be `.gitlab-ci.yml` unless the user explicitly says otherwise.
 
@@ -71,7 +71,7 @@ stages:
 
 For Java Maven services, the normal pipeline shape is `package -> image -> deploy`: build the JAR, build/push the image, then update the Kubernetes Deployment image with `kubectl set image`. Use this end-to-end flow by default when the project has a Dockerfile or deployment convention and the user does not explicitly say CI-only/no-deploy.
 
-For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image on `develop`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `develop` can deploy, `release-*` builds images but skips deploy, and other branches are skipped when this environment's policy applies.
+For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image on `release-*`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `release-*` can deploy, `hotfix-*` builds images but skips deploy, and other branches including `develop` are skipped when this environment's policy applies.
 
 If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For non-Java projects, keep using the smallest stage set that matches the request and project evidence.
 
@@ -85,14 +85,14 @@ This applies to every artifact type, including package outputs such as JAR files
 
 Prefer `workflow.rules` when the user wants pipelines only on specific branches.
 
-In this environment, only `develop` and `release-*` branches should start pipelines. Use a positive allow-list rule for those branches, then `when: never` for everything else.
+In this environment, only `release-*` and `hotfix-*` branches should start pipelines. Use a positive allow-list rule for those branches, then `when: never` for everything else.
 
 Example based on this repository:
 
 ```yaml
 workflow:
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^(develop|release-.*)$/'
+    - if: '$CI_COMMIT_BRANCH =~ /^(release-.*|hotfix-.*)$/'
     - when: never
 ```
 
@@ -100,15 +100,15 @@ For job-level rules, use `rules.changes` to avoid running unrelated service jobs
 
 If following this repository's branch policy:
 
-- `develop`: package, image, and deploy can run when relevant files change.
-- `release-*`: package and image can run, but deploy jobs are skipped by default.
-- All other branches, including `master` and `main`: skip the whole pipeline.
+- `release-*`: package, image, and deploy can run when relevant files change.
+- `hotfix-*`: package and image can run, but deploy jobs are skipped by default.
+- All other branches, including `develop`, `master`, and `main`: skip the whole pipeline.
 
 Deploy skip rule:
 
 ```yaml
 rules:
-  - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+  - if: '$CI_COMMIT_BRANCH =~ /^hotfix-.*$/'
     when: never
   - changes:
       - <service-path>/**/*
@@ -172,7 +172,7 @@ Only use Docker-in-Docker when the project already uses it or the user requests 
 
 For Java Maven services, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`. Generate this deploy job by default when using the Java Maven + Kaniko flow unless the user explicitly says not to deploy.
 
-For Vue/Node.js static frontends in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same branch behavior as Java: deploy only from `develop`; skip deploy on `release-*`; skip other branches when the environment branch allow-list is used. Generate this deploy job by default when using the Vue/Node.js static frontend + Kaniko flow unless the user explicitly says not to deploy.
+For Vue/Node.js static frontends in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same branch behavior as Java: deploy from `release-*`; skip deploy on `hotfix-*`; skip other branches, including `develop`, when the environment branch allow-list is used. Generate this deploy job by default when using the Vue/Node.js static frontend + Kaniko flow unless the user explicitly says not to deploy.
 
 For other project types, generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
 
@@ -216,14 +216,14 @@ For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT
 
 Prefer an independent `notify` stage/job over adding notification logic to the kubectl deploy job, because the kubectl image may not include curl or other HTTP clients. Use a curl image available in the target environment. If no curl image is available, use another image that includes curl. Do not require Python or the third-party `requests` package for basic WeCom notification.
 
-When notification is requested, add `notify` after `deploy` in `stages` and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `develop`, and generate image build success/failure notification for `release-*` because release branches build images but skip deployment by default. On `develop`, a package, image, or deploy failure should trigger the deploy failure notification. On `release-*`, a package or image failure should trigger the image build failure notification. Message style should match:
+When notification is requested, add `notify` after `deploy` in `stages` and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `release-*`, and generate image build success/failure notification for `hotfix-*` because hotfix branches build images but skip deployment by default. On `release-*`, a package, image, or deploy failure should trigger the deploy failure notification. On `hotfix-*`, a package or image failure should trigger the image build failure notification. Message style should match:
 
 - Deploy success: `开发环境发布通知\n<project-or-module>:<tag>发布成功`
 - Deploy failure: `开发环境发布通知\n<project>:<branch>发布失败`
 - Image success: `镜像构建通知\n<project-or-module>:<tag>构建成功`
 - Image failure: `镜像构建通知\n<project-or-module>:<tag>构建失败`
 
-Use the image tag for image build notifications and deploy success notifications, not the full image URL. Prefer the dotenv `IMAGE_TAG` produced by the image job. If only `IMAGE_URL` is available, derive the display tag with `${IMAGE_URL##*:}`. Otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. If a generated pipeline has `MODULE_NAME`, use it as the notification subject; otherwise use `CI_PROJECT_NAME`. For example, prefer `tpsp-monorepo-client-admin:release-1.8.0-mjsz_2026-05-21-14-11-55`, not `nledu-cloud-operatation-analysis:image.server:8082/nledu-cloud/nledu-cloud-operatation-analysis:release-1.0.0_2026-05-21-06-10-42`. For deploy failure notifications on `develop`, use the branch name (`CI_COMMIT_REF_NAME`) instead of the image tag, because package or image failures may happen before an image exists and the user needs to see which environment/branch failed.
+Use the image tag for image build notifications and deploy success notifications, not the full image URL. Prefer the dotenv `IMAGE_TAG` produced by the image job. If only `IMAGE_URL` is available, derive the display tag with `${IMAGE_URL##*:}`. Otherwise use `CI_COMMIT_TAG` or `CI_COMMIT_REF_NAME`. If a generated pipeline has `MODULE_NAME`, use it as the notification subject; otherwise use `CI_PROJECT_NAME`. For example, prefer `tpsp-monorepo-client-admin:release-1.8.0-mjsz_2026-05-21-14-11-55`, not `nledu-cloud-operatation-analysis:image.server:8082/nledu-cloud/nledu-cloud-operatation-analysis:release-1.0.0_2026-05-21-06-10-42`. For deploy failure notifications on `release-*`, use the branch name (`CI_COMMIT_REF_NAME`) instead of the image tag, because package or image failures may happen before an image exists and the user needs to see which environment/branch failed.
 
 Example notification job pattern:
 
@@ -244,7 +244,7 @@ notify:image:success:
     - job: image
       artifacts: true
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+    - if: '$CI_COMMIT_BRANCH =~ /^hotfix-.*$/'
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
@@ -263,7 +263,7 @@ notify:image:failure:
     entrypoint: [""]
   cache: []
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+    - if: '$CI_COMMIT_BRANCH =~ /^hotfix-.*$/'
       when: on_failure
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
@@ -288,7 +288,7 @@ notify:deploy:success:
     - job: image
       artifacts: true
   rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
       when: on_success
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
@@ -308,7 +308,7 @@ notify:deploy:failure:
     entrypoint: [""]
   cache: []
   rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
       when: on_failure
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
@@ -328,7 +328,7 @@ If the target GitLab Runner cannot pull `image.server:8082/library/curlimages/cu
 
 Use this when the target is a Java Maven service in this environment, or when the user wants the same pattern as this repository:
 
-- Branch workflow: only run pipelines on `develop` and `release-*`; skip every other branch.
+- Branch workflow: only run pipelines on `release-*` and `hotfix-*`; skip every other branch, including `develop`.
 - Stages: `package`, `image`, `deploy`.
 - Optional notification stage: add `notify` only when the user asks for publish/deploy/image notification.
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
@@ -340,18 +340,19 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Deploy: `kubectl set image` and `kubectl rollout status --timeout`, defaulting rollout wait time to `60s`.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
 - Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using independent curl notification jobs.
-- Release image notification: when notification is requested and following this repository's branch policy, `release-*` sends image build success notification after image build succeeds and image build failure notification when package or image fails because deploy is skipped.
-- Release policy: deploy jobs skip `release-*` by default.
+- Hotfix image notification: when notification is requested and following this repository's branch policy, `hotfix-*` sends image build success notification after image build succeeds and image build failure notification when package or image fails because deploy is skipped.
+- Release policy: deploy jobs run on `release-*` by default.
+- Hotfix policy: deploy jobs skip `hotfix-*` by default.
 
 For each deployable module, generate:
 
 - `package:<short-name>`
 - `image:<short-name>` needing `package:<short-name>` artifacts
 - `deploy:<short-name>` needing `image:<short-name>` dotenv artifacts
-- `notify:image:<short-name>:success` needing `image:<short-name>` dotenv artifacts for `release-*` image build success notification when notification is requested
-- `notify:image:<short-name>:failure` for `release-*` image build failure notification when notification is requested
-- `notify:deploy:<short-name>:success` needing `deploy:<short-name>` and `image:<short-name>` dotenv artifacts for `develop` deploy success notification when notification is requested
-- `notify:deploy:<short-name>:failure` for `develop` deploy failure notification when notification is requested
+- `notify:image:<short-name>:success` needing `image:<short-name>` dotenv artifacts for `hotfix-*` image build success notification when notification is requested
+- `notify:image:<short-name>:failure` for `hotfix-*` image build failure notification when notification is requested
+- `notify:deploy:<short-name>:success` needing `deploy:<short-name>` and `image:<short-name>` dotenv artifacts for `release-*` deploy success notification when notification is requested
+- `notify:deploy:<short-name>:failure` for `release-*` deploy failure notification when notification is requested
 
 Include `rules.changes` for root build files, wrapper files, Dockerfile, and the service path.
 
@@ -359,26 +360,28 @@ Include `rules.changes` for root build files, wrapper files, Dockerfile, and the
 
 Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or when the user wants the same frontend build/image pattern:
 
-- Branch workflow: only run pipelines on `develop` and `release-*`; skip every other branch.
+- Branch workflow: only run pipelines on `release-*` and `hotfix-*`; skip every other branch, including `develop`.
 - Stages: `package`, `image`, `deploy`.
 - Normal flow: install Node dependencies, run the frontend build script, publish `dist/` as an artifact, then build/push the nginx image with Kaniko.
-- Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known.
+- Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known. When project evidence requires a high Node.js version, such as Node 20+ from `engines.node`, `.nvmrc`, `.node-version`, Volta, Vite/Nuxt docs, or dependency requirements, use `image.server:8082/library/node:22.19.0` by default.
 - Package command: use `npm ci` only with `package-lock.json`; otherwise use `npm install`. Use pnpm/yarn commands only when their lockfiles or project config prove they are used.
-- npm registry: default to `NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"` for Node/Vue build jobs unless the project has private registry or `.npmrc` settings that must be preserved.
+- npm/pnpm registry: default Node/Vue npm and pnpm installs to `https://registry.npmmirror.com` unless the project has private registry or `.npmrc` settings that must be preserved. Set `NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"` for npm-compatible tools, and for pnpm install commands also pass `--registry=https://registry.npmmirror.com` explicitly.
+- Husky: disable Git hooks during CI dependency installation with `HUSKY: "0"` in Node/Vue package jobs. This avoids `prepare` scripts or Husky install steps failing in GitLab CI environments where hooks are irrelevant.
 - Build command: use the actual `package.json` build script, usually `npm run build` for Vue CLI.
 - Artifact handoff: keep `dist/` as the package artifact when Vue CLI `outputDir` or Vite `build.outDir` does not override it.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, the actual Dockerfile path such as `lib/Dockerfile`, and `--context "$CI_PROJECT_DIR"` when the Dockerfile copies both `dist/` and files under `lib/`.
 - nginx image pattern: preserve Dockerfiles that use internal nginx bases such as `image.server:8082/nledu-cloud/nginx:1.14.2` and copy `dist` plus nginx config.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
 - Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
-- Deploy: use the shared `kubectl set image` job on `develop`; skip `release-*` by default.
-- Release policy: deploy jobs skip `release-*` by default, so release branches only package and build/push images.
+- Deploy: use the shared `kubectl set image` job on `release-*`; skip `hotfix-*` by default.
+- Release policy: deploy jobs run on `release-*` by default.
+- Hotfix policy: deploy jobs skip `hotfix-*` by default, so hotfix branches only package and build/push images.
 
 For a single frontend app, generate:
 
 - `package:web`
 - `image:web` needing `package:web` artifacts
-- `deploy:web` needing `image:web` dotenv artifacts, with rules that skip `release-*` and allow `develop`
+- `deploy:web` needing `image:web` dotenv artifacts, with rules that skip `hotfix-*` and allow `release-*`
 - matching notification jobs only when notification is requested
 
 Include `rules.changes` for `package.json`, lockfiles, Vue/Vite/Nuxt config files, Dockerfile, nginx config, public assets, and `src/**/*`.
@@ -399,7 +402,7 @@ List only variables needed by the generated pipeline. Common variables:
 - `MAVEN_SETTINGS_XML`
 - `WECHAT_WEBHOOK` when publish/deploy/image notification is requested
 
-Frontend-only pipelines usually do not need `MAVEN_SETTINGS_XML`. Node/Vue jobs default `NPM_CONFIG_REGISTRY` to `https://registry.npmmirror.com`. Add or preserve `NPM_TOKEN`, scoped registry variables, or project-specific npm authentication only when the project needs private npm packages or already has `.npmrc` settings.
+Frontend-only pipelines usually do not need `MAVEN_SETTINGS_XML`. Node/Vue jobs default npm and pnpm installs to `https://registry.npmmirror.com`; set `NPM_CONFIG_REGISTRY` and add pnpm `--registry=https://registry.npmmirror.com` unless project-specific registry settings must be preserved. Add or preserve `NPM_TOKEN`, scoped registry variables, or project-specific npm authentication only when the project needs private npm packages or already has `.npmrc` settings.
 
 Never hard-code secrets.
 
@@ -415,7 +418,8 @@ Before finishing, verify:
 - Required variables fail fast with shell parameter checks when used in scripts.
 - Node jobs use the package manager and Node version indicated by project files.
 - Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
-- Node/Vue npm jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.
+- Node/Vue npm and pnpm install jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.
+- Node/Vue package jobs set `HUSKY: "0"` to disable Husky hooks during CI dependency installation.
 - Frontend image jobs receive the built static artifact and use a Kaniko context that includes every path referenced by the Dockerfile.
 - Optional notification jobs reference `WECHAT_WEBHOOK`, include `mentioned_list` with `GITLAB_USER_LOGIN`, and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.
