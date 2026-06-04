@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.18"
+  version: "1.19"
 ---
 
 Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `release-*`; `hotfix-*` builds images but skips deployment. `develop` does not start pipelines by default.
@@ -80,6 +80,12 @@ If the user asks for CI only, do not add deployment. If the project has no Docke
 Do not set `artifacts.expire_in` in generated GitLab CI jobs unless the user explicitly asks for a concrete artifact retention period. Omit artifact expiration so GitLab uses the system/project default artifact retention policy.
 
 This applies to every artifact type, including package outputs such as JAR files or `dist/`, dotenv reports such as `build.env`, and any future language-specific artifacts. If the user requests retention, set `artifacts.expire_in` only on the relevant jobs and mention the assumption in the final response.
+
+## Cache Policy
+
+Every generated cache key must be scoped to the current GitLab project with `$CI_PROJECT_NAME` so different projects never share dependency caches accidentally. Use explicit project-level keys such as `$CI_PROJECT_NAME-maven`, `$CI_PROJECT_NAME-npm`, `$CI_PROJECT_NAME-pnpm`, or `$CI_PROJECT_NAME-yarn`. For multi-module projects, append the module or short service name when separate caches are useful, for example `$CI_PROJECT_NAME-$MODULE_NAME-maven` or `$CI_PROJECT_NAME-web-npm`.
+
+Do not use generic cache keys such as `maven`, `npm`, `node`, `default`, or branch-only keys. Keep cache paths inside the project workspace, such as `.m2/repository/`, `.m2/wrapper/`, `.npm/`, `.pnpm-store/`, or `.yarn/cache/`; do not cache global home directories outside `$CI_PROJECT_DIR`.
 
 ## Branch And Rule Policy
 
@@ -333,6 +339,7 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Optional notification stage: add `notify` only when the user asks for publish/deploy/image notification.
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
 - Maven package: `./mvnw $MAVEN_CLI_OPTS -s "$MAVEN_SETTINGS_XML" -pl $MODULE_NAME -am clean package -DskipTests` for multi-module services.
+- Maven cache: use a project-scoped cache key such as `$CI_PROJECT_NAME-maven`; when module-level isolation is needed, use `$CI_PROJECT_NAME-$MODULE_NAME-maven`.
 - Artifact handoff: copy the service JAR to `build/temp/*.jar`.
 - Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `build/Dockerfile`, `--build-arg MODULE_NAME="$MODULE_NAME"`, `--insecure-pull`, and `--insecure`.
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)`.
@@ -365,6 +372,7 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Normal flow: install Node dependencies, run the frontend build script, publish `dist/` as an artifact, then build/push the nginx image with Kaniko.
 - Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known. When project evidence requires a high Node.js version, such as Node 20+ from `engines.node`, `.nvmrc`, `.node-version`, Volta, Vite/Nuxt docs, or dependency requirements, use `image.server:8082/library/node:22.19.0` by default.
 - Package command: use `npm ci` only with `package-lock.json`; otherwise use `npm install`. Use pnpm/yarn commands only when their lockfiles or project config prove they are used.
+- Package cache: use project-scoped cache keys such as `$CI_PROJECT_NAME-web-npm`, `$CI_PROJECT_NAME-web-pnpm`, or `$CI_PROJECT_NAME-web-yarn`; never use generic npm/pnpm/yarn cache keys shared across projects.
 - npm/pnpm registry: default Node/Vue npm and pnpm installs to `https://registry.npmmirror.com` unless the project has private registry or `.npmrc` settings that must be preserved. Set `NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"` for npm-compatible tools, and for pnpm install commands also pass `--registry=https://registry.npmmirror.com` explicitly.
 - Husky: disable Git hooks during CI dependency installation with `HUSKY: "0"` in Node/Vue package jobs. This avoids `prepare` scripts or Husky install steps failing in GitLab CI environments where hooks are irrelevant.
 - Build command: use the actual `package.json` build script, usually `npm run build` for Vue CLI.
@@ -416,6 +424,7 @@ Before finishing, verify:
 - Artifacts or dotenv files are produced before downstream jobs consume them.
 - `artifacts.expire_in` is omitted unless the user explicitly requested a concrete retention period.
 - Required variables fail fast with shell parameter checks when used in scripts.
+- Cache keys are scoped to `$CI_PROJECT_NAME`, for example `$CI_PROJECT_NAME-maven` or `$CI_PROJECT_NAME-web-npm`.
 - Node jobs use the package manager and Node version indicated by project files.
 - Node/Vue npm jobs cache `.npm/` package downloads, not `node_modules/`, unless the user explicitly asks to cache installed dependencies.
 - Node/Vue npm and pnpm install jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.

@@ -72,6 +72,7 @@ Java Maven 模板适用于：
 - Java Maven 多模块项目
 - 使用 Maven Wrapper 打包 JAR
 - Maven 构建命令必须带 `-s $MAVEN_SETTINGS_XML`，因为私服、认证等配置依赖该 settings 文件
+- Maven 缓存 key 默认使用项目级隔离，例如 `$CI_PROJECT_NAME-maven`，多模块需要独立缓存时可使用 `$CI_PROJECT_NAME-$MODULE_NAME-maven`
 - JDK 8 Maven job 使用 `image.server:8082/library/maven:3.8.6-openjdk-8`
 - JDK 17 Maven job 使用 `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
 - 使用 Kaniko 构建 Docker 镜像，Kaniko job 镜像使用 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`，并带 `--insecure-pull --insecure` 允许从 HTTP 仓库拉取基础镜像并推送镜像
@@ -145,6 +146,7 @@ npm 缓存策略：
 
 - 默认缓存 npm 包下载缓存 `.npm/`
 - 默认不缓存 `node_modules/`
+- cache key 必须带 `$CI_PROJECT_NAME` 做项目级隔离，例如 `$CI_PROJECT_NAME-web-npm`、`$CI_PROJECT_NAME-web-pnpm` 或 `$CI_PROJECT_NAME-web-yarn`，不要使用 `npm`、`pnpm`、`yarn`、`node` 等通用 key
 - 默认 npm/pnpm 安装都使用 `https://registry.npmmirror.com` 淘宝镜像源；pnpm install 命令显式追加 `--registry=https://registry.npmmirror.com`
 - Node/Vue package job 默认设置 `HUSKY=0`，避免 Husky `prepare` 或 Git hooks 安装在 CI 里导致依赖安装失败
 - 有 `package-lock.json` 时使用 `npm ci --cache .npm --prefer-offline`
@@ -165,6 +167,7 @@ npm 缓存策略：
 - Node/Vue 项目先检测 Node 版本和包管理器，再选择对应 Node 构建镜像和安装命令。
 - Node/Vue 默认不生成测试或 lint job；只有用户明确要求或项目已有明确 CI 规则时才生成。
 - Node/Vue 默认缓存 `.npm/` 包下载缓存，不缓存 `node_modules/`。
+- 所有依赖缓存 key 都必须按项目隔离并包含 `$CI_PROJECT_NAME`，例如 Java 使用 `$CI_PROJECT_NAME-maven`，Node/Vue 使用 `$CI_PROJECT_NAME-web-npm`。
 - Node/Vue 默认使用 `https://registry.npmmirror.com` 作为 npm/pnpm 安装源；如果项目使用私有 npm 仓库或 `.npmrc`，优先保留项目配置。
 - Node/Vue package job 默认设置 `HUSKY=0`，CI 中不安装或执行 Husky hooks。
 - 默认不设置 `artifacts.expire_in`，所有产物过期时间使用 GitLab 系统/项目默认设置；只有用户明确要求具体保留时间时才生成 `artifacts.expire_in`。

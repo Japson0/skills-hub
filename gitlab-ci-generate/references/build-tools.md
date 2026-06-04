@@ -8,6 +8,8 @@ Use Maven Wrapper when present.
 
 Maven builds in this environment must use the CI-provided Maven settings file because repository credentials and other required configuration live there. Include `-s $MAVEN_SETTINGS_XML` in every Maven command, and add a fail-fast check for `MAVEN_SETTINGS_XML` before running Maven.
 
+All dependency cache keys must be scoped to the current GitLab project with `$CI_PROJECT_NAME`. For Maven, use `$CI_PROJECT_NAME-maven` by default. In multi-module projects where separate module caches are useful, use a project-and-module key such as `$CI_PROJECT_NAME-$MODULE_NAME-maven`. Cache paths must stay inside `$CI_PROJECT_DIR`, such as `.m2/repository/` and `.m2/wrapper/`.
+
 Before choosing the Maven build image, detect the project's JDK version from concrete files. Use these images for Maven package/test jobs:
 
 - JDK 8: `image.server:8082/library/maven:3.8.6-openjdk-8`
@@ -79,6 +81,8 @@ Detect Node.js version from `package.json` `volta.node`, `engines.node`, `.nvmrc
 
 Cache npm's package download cache, not `node_modules/`. Caching `.npm/` works well with `npm ci` because installs stay clean while downloaded packages can be reused. Avoid caching `node_modules/` by default because it can preserve stale installed dependencies, break across Node/Alpine image changes, and waste time when `npm ci` deletes it before reinstalling.
 
+All Node/Vue dependency cache keys must be scoped to the current GitLab project with `$CI_PROJECT_NAME`. Use keys such as `$CI_PROJECT_NAME-npm`, `$CI_PROJECT_NAME-web-npm`, `$CI_PROJECT_NAME-web-pnpm`, or `$CI_PROJECT_NAME-web-yarn`. Do not use generic cache keys such as `npm`, `pnpm`, `yarn`, `node`, or branch-only keys. Keep cache paths inside `$CI_PROJECT_DIR`, such as `.npm/`, `.pnpm-store/`, or `.yarn/cache/`.
+
 Use `https://registry.npmmirror.com` as the default npm-compatible registry for Node/Vue build jobs in this environment. Set `NPM_CONFIG_REGISTRY` in job variables for npm-compatible tools, and add `--registry=https://registry.npmmirror.com` to pnpm install commands explicitly. If the project uses a private npm registry, scoped packages, or an existing `.npmrc`, preserve the project-specific registry/auth settings instead of overriding them with npmmirror.
 
 Do not generate Node test jobs by default in this environment. Add `npm test`, `npm run lint`, or equivalent only when the user explicitly asks for test/lint CI gates or the project's existing CI policy clearly requires them.
@@ -106,10 +110,7 @@ package:web:
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
     NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"
   cache:
-    key:
-      prefix: "$CI_PROJECT_NAME-web-npm"
-      files:
-        - package-lock.json
+    key: "$CI_PROJECT_NAME-web-npm"
     paths:
       - .npm/
   script:
