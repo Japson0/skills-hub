@@ -1,23 +1,23 @@
 ---
 name: gitlab-ci-generate
-description: Generate a .gitlab-ci.yml for an existing project by inspecting its language, build tool, Dockerfile, deployment style, and branch policy. Use when the user says they have a project and want to generate GitLab CI, gitlab-ci.yml, or gitlab-cli.yml; supports general project analysis and includes this environment's Java Maven + Kaniko + kubectl and Vue/Node.js static frontend + Kaniko patterns when applicable.
+description: Generate a .gitlab-ci.yml for an existing project by inspecting its language, build tool, Dockerfile, deployment style, and branch policy. Use when the user says they have a project and want to generate GitLab CI, gitlab-ci.yml, or gitlab-cli.yml; supports general project analysis and includes this environment's Java Maven + Kaniko + kubectl, Vue/Node.js static frontend + Kaniko, and .NET 8 publish + Kaniko patterns when applicable.
 license: MIT
-compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, Kaniko image builds, and Kubernetes deployment by kubectl.
+compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, .NET publish builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.19"
+  version: "1.20"
 ---
 
-Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `release-*`; `hotfix-*` builds images but skips deployment. `develop` does not start pipelines by default.
+Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `release-*`; `hotfix-*` builds images but skips deployment. For .NET 8 services, the normal delivery flow is `dotnet restore`, `dotnet publish` to `publish/`, build/push a runtime image from that published artifact, then update the Kubernetes Deployment image. `develop` does not start pipelines by default.
 
 Treat `gitlab-cli.yml` in user prompts as likely meaning GitLab CI config. The actual file name should normally be `.gitlab-ci.yml` unless the user explicitly says otherwise.
 
-This skill is general-purpose. Do not blindly copy this repository's pipeline for unrelated projects. For Java Maven services that have a Dockerfile and are intended to deploy, prefer the Java Maven + Kaniko + kubectl flow because it matches the normal delivery path in this environment. For Vue/Node.js frontends that build static assets and ship with nginx Dockerfiles, prefer the Node build + Kaniko image flow because it preserves the frontend artifact handoff.
+This skill is general-purpose. Do not blindly copy this repository's pipeline for unrelated projects. For Java Maven services that have a Dockerfile and are intended to deploy, prefer the Java Maven + Kaniko + kubectl flow because it matches the normal delivery path in this environment. For Vue/Node.js frontends that build static assets and ship with nginx Dockerfiles, prefer the Node build + Kaniko image flow because it preserves the frontend artifact handoff. For .NET services that publish a web entry project and have a Dockerfile copying `publish/`, prefer the .NET publish + Kaniko + kubectl flow because the runtime image should consume published files rather than rebuild inside the image job.
 
 ## Workflow
 
 1. Inspect the target project.
-2. Identify language, package manager/build tool, Java/JDK or Node.js version when applicable, test command, Docker/image strategy, deployment target, and branch policy.
+2. Identify language, package manager/build tool, Java/JDK, Node.js, or .NET target version when applicable, test command, Docker/image strategy, deployment target, and branch policy.
 3. Ask at most one short clarification if a required choice is missing.
 4. Generate or update `.gitlab-ci.yml` with the minimum stages needed.
 5. List required GitLab CI/CD variables and assumptions.
@@ -32,6 +32,7 @@ Common signals:
 - Java Maven: `pom.xml`, `mvnw`, `.mvn/wrapper/`.
 - Java/JDK version: Maven `pom.xml` properties such as `java.version`, `maven.compiler.source`, `maven.compiler.target`, `maven.compiler.release`, Spring Boot parent conventions, `.java-version`, `Dockerfile` base images, and README/build documentation. Prefer explicit Maven compiler settings when present.
 - Java Gradle: `build.gradle`, `build.gradle.kts`, `gradlew`.
+- .NET: `*.sln`, `*.csproj`, `NuGet.config`, `global.json`, `Directory.Build.props`, `Directory.Packages.props`, and Dockerfiles that copy `publish/` or use ASP.NET runtime bases.
 - Node.js: `package.json`, lockfiles, scripts, `engines.node`, `volta.node`, `.nvmrc`, `.node-version`.
 - Vue frontend: `vue.config.js`, `vite.config.*`, `nuxt.config.*`, dependencies such as `vue`, `@vue/cli-service`, `vite`, or `nuxt`, and build output settings such as Vue CLI `outputDir` or Vite `build.outDir`.
 - Python: `pyproject.toml`, `requirements.txt`, `poetry.lock`, `Pipfile`.
@@ -73,7 +74,9 @@ For Java Maven services, the normal pipeline shape is `package -> image -> deplo
 
 For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image on `release-*`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `release-*` can deploy, `hotfix-*` builds images but skips deploy, and other branches including `develop` are skipped when this environment's policy applies.
 
-If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For non-Java projects, keep using the smallest stage set that matches the request and project evidence.
+For .NET services, the normal pipeline shape is `package -> image -> deploy`: restore the entry `.csproj` with `NuGet.config` when present, publish for `linux-x64` to `$CI_PROJECT_DIR/publish`, build/push the runtime image with Kaniko from a Dockerfile that copies `publish/`, then update the Kubernetes Deployment image. Use this by default when the project has `.sln`/`.csproj`, a deployable web entry project, and a Dockerfile like this environment's .NET services. When following this environment's branch policy, .NET pipelines use the same allow-list as Java/Vue: only `release-*` and `hotfix-*` start pipelines; `release-*` can package, build image, and deploy; `hotfix-*` packages and builds images but skips deploy; all other branches, including `develop`, `main`, and `master`, are skipped.
+
+If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For other project types without a documented environment pattern, keep using the smallest stage set that matches the request and project evidence.
 
 ## Artifact Retention Policy
 
@@ -127,6 +130,7 @@ Ask before applying this policy to another project unless the user says to reuse
 After identifying the project language/build tool, read `references/build-tools.md` for the relevant section and adapt its template to the target project:
 
 - Java Maven: Maven wrapper, CI Maven settings, JDK 8/17 image selection, single-module and multi-module package jobs.
+- .NET: solution/project detection, .NET SDK image selection, `dotnet restore`/`dotnet publish` to `publish/`, NuGet cache, and Kaniko artifact handoff.
 - Node.js: package manager selection from lockfiles, Node version detection, and build jobs; test/lint jobs are optional and not generated by default.
 - Vue/Node.js Static Frontend: Vue CLI/Vite static asset builds, `dist/` artifact handoff, nginx Dockerfile patterns, and Kaniko image jobs.
 - Python and Go: lightweight test templates.
@@ -179,6 +183,8 @@ Only use Docker-in-Docker when the project already uses it or the user requests 
 For Java Maven services, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`. Generate this deploy job by default when using the Java Maven + Kaniko flow unless the user explicitly says not to deploy.
 
 For Vue/Node.js static frontends in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same branch behavior as Java: deploy from `release-*`; skip deploy on `hotfix-*`; skip other branches, including `develop`, when the environment branch allow-list is used. Generate this deploy job by default when using the Vue/Node.js static frontend + Kaniko flow unless the user explicitly says not to deploy.
+
+For .NET services in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same `kubectl set image` pattern. Generate this deploy job by default when using the .NET publish + Kaniko flow unless the user explicitly says not to deploy.
 
 For other project types, generate deployment only when the user asks for it or the project clearly has an existing deployment convention.
 
@@ -394,6 +400,38 @@ For a single frontend app, generate:
 
 Include `rules.changes` for `package.json`, lockfiles, Vue/Vite/Nuxt config files, Dockerfile, nginx config, public assets, and `src/**/*`.
 
+### .NET Service
+
+Use this when the target is a .NET service like `nle-iot-cloud-service`, or when the user wants the same .NET publish/image/deploy pattern:
+
+- Project signals: `.sln`, one or more `.csproj` files, `NuGet.config`, and a deployable web entry project such as `*.Web.Entry/*.csproj`.
+- Branch workflow: use the user's branch policy. When reusing this environment's default policy, only run pipelines on `release-*` and `hotfix-*`; skip every other branch, including `develop`, `main`, and `master`.
+- Release policy: `release-*` runs package, image, and deploy jobs.
+- Hotfix policy: `hotfix-*` runs package and image jobs, but deploy jobs are skipped by default.
+- Stages: `package`, `image`, `deploy`; add `notify` only when the user asks for publish/deploy/image notification.
+- Normal flow: `dotnet restore`, `dotnet publish` to `$CI_PROJECT_DIR/publish`, build/push the Docker image from the root Dockerfile, then update the K8S Deployment image.
+- SDK image: use `image.server:8082/library/dotnet_sdk:8.0` for .NET 8 projects. If `global.json`, `TargetFramework`, or Dockerfile evidence points to another .NET version, use the matching internal SDK image or ask for the available image.
+- Restore command: use the deployable entry `.csproj`, `-r linux-x64`, and `--configfile NuGet.config` when `NuGet.config` exists.
+- Publish command: use `--no-restore -r linux-x64 --framework <target-framework> -c Release -o "$PUBLISH_DIR" --self-contained false` unless project evidence requires self-contained publish.
+- NuGet cache: set `NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"` and cache `.nuget/packages/` with a project-scoped key such as `$CI_PROJECT_NAME-nuget`.
+- Dotnet CI variables: set `DOTNET_CLI_TELEMETRY_OPTOUT: "1"`, `DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"`, `NUGET_HTTP_TIMEOUT: "300"`, and `PUBLISH_DIR: "$CI_PROJECT_DIR/publish"`.
+- Artifact handoff: publish `publish/` as the package artifact. Do not set `artifacts.expire_in` unless the user asks for a retention period.
+- Image build: Kaniko with image `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`, `--context "$CI_PROJECT_DIR"`, `--dockerfile "$CI_PROJECT_DIR/Dockerfile"`, `--insecure-pull`, and `--insecure`.
+- Runtime Dockerfile pattern: preserve Dockerfiles that use internal ASP.NET runtime bases such as `192.168.133.162:8082/iotcloud/mcraspnet:8.0`, set `WORKDIR /app`, copy `publish/`, expose the service port, and use the real entry executable in `ENTRYPOINT`.
+- Image tag: prefer `${CI_COMMIT_REF_SLUG}_$(TZ=CST-8 date +%F-%H-%M-%S)` for .NET services when matching this reference project, because GitLab's slug is safer for image tags.
+- Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
+- Deploy: use the shared `kubectl set image` job and `kubectl rollout status --timeout`, defaulting rollout wait time to `60s`.
+- Optional notification: when requested, add independent curl jobs like this skill's notification pattern. A simple single-service .NET pipeline can use `notify:success` after deploy and `notify:failure` with `when: on_failure`; if using the release/hotfix branch split, keep hotfix image notifications and release deploy notifications consistent with Java/Vue.
+
+For a single .NET service, generate:
+
+- `package`
+- `build:image` needing `package` artifacts, or `image:<short-name>` for multi-service repos
+- `deploy` needing `build:image` dotenv artifacts
+- matching notification jobs only when notification is requested
+
+Include `rules.changes` for `*.sln`, `NuGet.config`, `global.json`, `Directory.Build.props`, `Directory.Packages.props`, the entry project path, referenced project paths, and Dockerfile.
+
 ## Required Variables
 
 List only variables needed by the generated pipeline. Common variables:
@@ -409,6 +447,8 @@ List only variables needed by the generated pipeline. Common variables:
 - `KUBE_ROLLOUT_TIMEOUT` optional, defaults to `60s`
 - `MAVEN_SETTINGS_XML`
 - `WECHAT_WEBHOOK` when publish/deploy/image notification is requested
+
+.NET-only pipelines usually do not need `MAVEN_SETTINGS_XML`. They may need `NuGet.config` checked into the repository or GitLab variables referenced by `NuGet.config` for private package sources. Do not hard-code NuGet credentials in `.gitlab-ci.yml`.
 
 Frontend-only pipelines usually do not need `MAVEN_SETTINGS_XML`. Node/Vue jobs default npm and pnpm installs to `https://registry.npmmirror.com`; set `NPM_CONFIG_REGISTRY` and add pnpm `--registry=https://registry.npmmirror.com` unless project-specific registry settings must be preserved. Add or preserve `NPM_TOKEN`, scoped registry variables, or project-specific npm authentication only when the project needs private npm packages or already has `.npmrc` settings.
 
@@ -430,6 +470,8 @@ Before finishing, verify:
 - Node/Vue npm and pnpm install jobs use `https://registry.npmmirror.com` by default, unless project-specific private registry settings must be preserved.
 - Node/Vue package jobs set `HUSKY: "0"` to disable Husky hooks during CI dependency installation.
 - Frontend image jobs receive the built static artifact and use a Kaniko context that includes every path referenced by the Dockerfile.
+- .NET package jobs publish the selected entry `.csproj` to `publish/`, cache NuGet packages under `.nuget/packages/`, and pass `publish/` to the image job as an artifact.
+- .NET image jobs use a Dockerfile that matches the artifact handoff, usually `COPY publish/ .`, and the `ENTRYPOINT` matches the actual published executable.
 - Optional notification jobs reference `WECHAT_WEBHOOK`, include `mentioned_list` with `GITLAB_USER_LOGIN`, and never hard-code webhook URLs or keys.
 - `rules.changes` paths match the actual project layout.
 - Branch and deploy behavior match the user's stated environment policy.

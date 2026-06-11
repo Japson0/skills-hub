@@ -67,6 +67,117 @@ Do not set `artifacts.expire_in` unless the user asks for a specific retention p
 
 If using this repository's Dockerfile pattern, copy the selected JAR into `build/temp/` instead of publishing directly from `target/`.
 
+## .NET
+
+Use this for .NET services that build from `.sln`/`.csproj` files and then ship a runtime Docker image. Inspect the actual project before choosing paths:
+
+- Solution and entry project: detect `*.sln` and the deployable entry `.csproj`. Common entry names include `*.Web.Entry/*.csproj`, `*.Api/*.csproj`, `*.Web/*.csproj`, and `*.Service/*.csproj`.
+- Target framework: read `TargetFramework`/`TargetFrameworks` in the entry `.csproj`, `global.json`, and Dockerfile base images. For `net8.0`, use .NET 8 SDK/runtime images.
+- NuGet config: use `--configfile NuGet.config` when `NuGet.config` exists. Do not invent NuGet credentials; credentials should come from checked-in config placeholders or GitLab CI/CD variables.
+- Runtime identifier: this environment's service pattern publishes for `linux-x64`.
+- Publish output: publish to `$CI_PROJECT_DIR/publish` so the Dockerfile can `COPY publish/ .`.
+- Self-contained: use `--self-contained false` when the Dockerfile runtime base is ASP.NET runtime, such as `mcraspnet:8.0`. Use self-contained only when the project or Dockerfile clearly requires it.
+
+Default CI variables for .NET package jobs:
+
+```yaml
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  NUGET_HTTP_TIMEOUT: "300"
+  PUBLISH_DIR: "$CI_PROJECT_DIR/publish"
+```
+
+Example package job for a single .NET 8 service with a web entry project:
+
+```yaml
+package:
+  stage: package
+  image: image.server:8082/library/dotnet_sdk:8.0
+  timeout: 30m
+  cache:
+    key: "$CI_PROJECT_NAME-nuget"
+    paths:
+      - .nuget/packages/
+  variables:
+    NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+  script:
+    - export PATH="/root/.dotnet/tools:$PATH"
+    - dotnet --info
+    - dotnet nuget list source --configfile NuGet.config
+    - |
+      timeout 15m dotnet restore NIFCWeb.Web.Entry/NIFCWeb.Web.Entry.csproj \
+        -r linux-x64 \
+        --configfile NuGet.config \
+        --verbosity normal
+    - |
+      timeout 20m dotnet publish NIFCWeb.Web.Entry/NIFCWeb.Web.Entry.csproj \
+        --no-restore \
+        -r linux-x64 \
+        --framework net8.0 \
+        -c Release \
+        -o "$PUBLISH_DIR" \
+        --self-contained false \
+        --verbosity normal
+  artifacts:
+    paths:
+      - publish/
+```
+
+Adapt `NIFCWeb.Web.Entry/NIFCWeb.Web.Entry.csproj` and `net8.0` to the target project. If no `NuGet.config` exists, remove `dotnet nuget list source --configfile NuGet.config` and `--configfile NuGet.config` from restore. Keep `NUGET_PACKAGES` inside `$CI_PROJECT_DIR` so the cache is safe and project-local.
+
+Example Kaniko image job for a Dockerfile that copies the published artifact:
+
+```yaml
+build:image:
+  stage: image
+  image:
+    name: image.server:8082/library/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  needs:
+    - job: package
+      artifacts: true
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      : "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required}"
+      : "${CI_REGISTRY_PROJECT:?CI_REGISTRY_PROJECT is required}"
+      : "${CI_REGISTRY_USER:?CI_REGISTRY_USER is required}"
+      : "${CI_REGISTRY_PASSWORD:?CI_REGISTRY_PASSWORD is required}"
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {"auths":{"$DOCKER_REGISTRY":{"username":"$CI_REGISTRY_USER","password":"$CI_REGISTRY_PASSWORD"}}}
+      EOF
+    - |
+      IMAGE_TAG="${CI_COMMIT_REF_SLUG}_$(TZ=CST-8 date +%F-%H-%M-%S)"
+      IMAGE_URL="$DOCKER_REGISTRY/$CI_REGISTRY_PROJECT/$CI_PROJECT_NAME:$IMAGE_TAG"
+      /kaniko/executor \
+        --context "$CI_PROJECT_DIR" \
+        --dockerfile "$CI_PROJECT_DIR/Dockerfile" \
+        --destination "$IMAGE_URL" \
+        --insecure-pull \
+        --insecure
+      printf 'IMAGE_URL=%s\nIMAGE_TAG=%s\n' "$IMAGE_URL" "$IMAGE_TAG" > build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+```
+
+Runtime Dockerfile pattern for published .NET 8 services:
+
+```dockerfile
+FROM 192.168.133.162:8082/iotcloud/mcraspnet:8.0
+ENV TZ=Asia/Shanghai
+WORKDIR /app
+COPY publish/ .
+ENTRYPOINT ["/app/NIFCWeb.Web.Entry", "--urls", "http://*:5000"]
+EXPOSE 5000
+```
+
+Adapt the base image, executable name, URL binding, and exposed port to the target project. Prefer the artifact handoff above for CI because it keeps NuGet restore/publish logs in the package job and keeps the image job focused on building and pushing the runtime image.
+
+If the repository contains a multi-stage Dockerfile with `dotnet-sonarscanner`, Sonar variables, `curl`, and `jq`, do not assume Sonar is required for normal CI generation. Add that Dockerfile path or Sonar build args only when the user asks for Sonar/quality gate integration or the existing project policy clearly requires it.
+
 ## Node.js
 
 Infer commands from `package.json` scripts and lockfiles. Prefer the package manager proven by lockfiles:
