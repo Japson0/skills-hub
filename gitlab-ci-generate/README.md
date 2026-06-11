@@ -2,7 +2,7 @@
 
 这是一个用于生成 `.gitlab-ci.yml` 的通用 opencode skill。
 
-它的目标不是固定套用某一种 CI 模板，而是先分析目标项目结构，再根据项目的语言、构建工具、Dockerfile、部署方式和分支策略，生成可用的 GitLab CI 配置。对于当前环境的 Java Maven 服务，默认正常流程是构建 JAR 包、构建镜像、然后更新 K8S 中的镜像信息。对于 Vue/Node.js 静态前端，默认正常流程是安装依赖、构建 `dist/`、构建 nginx 静态资源镜像，然后在 `release-*` 分支更新 K8S 镜像；`hotfix-*` 分支只构建镜像不部署，`develop` 分支默认不触发流水线。
+它的目标不是固定套用某一种 CI 模板，而是先分析目标项目结构，再根据项目的语言、构建工具、Dockerfile、部署方式和分支策略，生成可用的 GitLab CI 配置。对于当前环境的 Java Maven 服务，默认正常流程是构建 JAR 包、构建镜像、然后更新 K8S 中的镜像信息。对于 Vue/Node.js 静态前端，默认正常流程是安装依赖、构建 `dist/`、构建 nginx 静态资源镜像，然后在 `release-*` 分支更新 K8S 镜像；对于 .NET 8 服务，默认正常流程是 `dotnet restore`、`dotnet publish` 到 `publish/`、构建运行时镜像、然后更新 K8S 镜像。`hotfix-*` 分支只构建镜像不部署，`develop` 分支默认不触发流水线。
 
 
 ## 适用场景
@@ -28,6 +28,10 @@
 ```
 
 ```text
+帮我给这个 .NET 8 服务生成 GitLab CI，发布到 publish 目录，再用 Kaniko 按 Dockerfile 构建镜像并部署
+```
+
+```text
 参考当前仓库的 GitLab CI 模板，给另一个 Maven 多模块项目生成 CI
 ```
 
@@ -40,8 +44,8 @@ skill 会按以下步骤执行：
 1. 检查目标项目结构。
 2. 判断项目语言和构建工具。
 3. 判断是否存在 Dockerfile。
-4. 如果是 Java 项目，判断 JDK 版本；如果是 Node/Vue 项目，判断 Node 版本和包管理器。
-5. 判断是否需要打包、构建镜像、部署；Java Maven 服务默认按构建 JAR、构建镜像、更新 K8S 镜像信息处理，Vue/Node.js 静态前端默认按构建静态文件、构建 nginx 镜像、`release-*` 部署处理，除非用户明确不要部署。
+4. 如果是 Java 项目，判断 JDK 版本；如果是 Node/Vue 项目，判断 Node 版本和包管理器；如果是 .NET 项目，判断目标框架、入口 `.csproj` 和 NuGet 配置。
+5. 判断是否需要打包、构建镜像、部署；Java Maven 服务默认按构建 JAR、构建镜像、更新 K8S 镜像信息处理，Vue/Node.js 静态前端默认按构建静态文件、构建 nginx 镜像、`release-*` 部署处理，.NET 服务默认按 `dotnet publish` 到 `publish/`、构建运行时镜像、更新 K8S 镜像处理，除非用户明确不要部署。
 6. 根据项目实际情况生成 `.gitlab-ci.yml`。
 7. 列出需要在 GitLab CI/CD Variables 中配置的变量。
 8. 尽量校验 YAML 结构和 job 依赖关系。
@@ -53,6 +57,7 @@ skill 会按以下步骤执行：
 - Java Maven：`pom.xml`、`mvnw`、`.mvn/wrapper/`
 - Java/JDK 版本：`pom.xml` 中的 `java.version`、`maven.compiler.source`、`maven.compiler.target`、`maven.compiler.release`，以及 `.java-version`、`Dockerfile`、README/构建文档
 - Java Gradle：`build.gradle`、`build.gradle.kts`、`gradlew`
+- .NET：`*.sln`、`*.csproj`、`NuGet.config`、`global.json`、`Directory.Build.props`、`Directory.Packages.props`
 - Node.js：`package.json`、`package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`、`engines.node`、`volta.node`、`.nvmrc`、`.node-version`
 - Vue 前端：`vue.config.js`、`vite.config.*`、`nuxt.config.*`，以及 `vue`、`@vue/cli-service`、`vite`、`nuxt` 等依赖
 - Python：`pyproject.toml`、`requirements.txt`、`poetry.lock`、`Pipfile`
@@ -62,7 +67,7 @@ skill 会按以下步骤执行：
 
 ## 内置参考模板
 
-这个 skill 内置了当前环境常用的 Java Maven + Kaniko + kubectl 模板，以及 Vue/Node.js 静态前端 + Kaniko + kubectl 模板。语言/构建工具的详细模板拆分在 `references/build-tools.md`，主 `SKILL.md` 只保留检测、决策、分支、部署、通知等通用规则，方便后续继续增加其他语言。
+这个 skill 内置了当前环境常用的 Java Maven + Kaniko + kubectl 模板、Vue/Node.js 静态前端 + Kaniko + kubectl 模板，以及 .NET publish + Kaniko + kubectl 模板。语言/构建工具的详细模板拆分在 `references/build-tools.md`，主 `SKILL.md` 只保留检测、决策、分支、部署、通知等通用规则，方便后续继续增加其他语言。
 
 ### Java Maven 服务
 
@@ -72,6 +77,7 @@ Java Maven 模板适用于：
 - Java Maven 多模块项目
 - 使用 Maven Wrapper 打包 JAR
 - Maven 构建命令必须带 `-s $MAVEN_SETTINGS_XML`，因为私服、认证等配置依赖该 settings 文件
+- Maven 缓存 key 默认使用项目级隔离，例如 `$CI_PROJECT_NAME-maven`，多模块需要独立缓存时可使用 `$CI_PROJECT_NAME-$MODULE_NAME-maven`
 - JDK 8 Maven job 使用 `image.server:8082/library/maven:3.8.6-openjdk-8`
 - JDK 17 Maven job 使用 `image.server:8082/library/maven:3.9.12-eclipse-temurin-17`
 - 使用 Kaniko 构建 Docker 镜像，Kaniko job 镜像使用 `image.server:8082/library/kaniko-project/executor:v1.23.2-debug`，并带 `--insecure-pull --insecure` 允许从 HTTP 仓库拉取基础镜像并推送镜像
@@ -145,6 +151,7 @@ npm 缓存策略：
 
 - 默认缓存 npm 包下载缓存 `.npm/`
 - 默认不缓存 `node_modules/`
+- cache key 必须带 `$CI_PROJECT_NAME` 做项目级隔离，例如 `$CI_PROJECT_NAME-web-npm`、`$CI_PROJECT_NAME-web-pnpm` 或 `$CI_PROJECT_NAME-web-yarn`，不要使用 `npm`、`pnpm`、`yarn`、`node` 等通用 key
 - 默认 npm/pnpm 安装都使用 `https://registry.npmmirror.com` 淘宝镜像源；pnpm install 命令显式追加 `--registry=https://registry.npmmirror.com`
 - Node/Vue package job 默认设置 `HUSKY=0`，避免 Husky `prepare` 或 Git hooks 安装在 CI 里导致依赖安装失败
 - 有 `package-lock.json` 时使用 `npm ci --cache .npm --prefer-offline`
@@ -152,19 +159,66 @@ npm 缓存策略：
 - 只有用户明确要求时，才考虑缓存 `node_modules/`
 - 如果项目已有私有 npm 仓库、scope registry 或 `.npmrc` 认证配置，应保留项目配置，不强行覆盖为淘宝源
 
+### .NET 服务
+
+.NET 模板适用于：
+
+- `.sln` + 多个 `.csproj` 的 .NET 服务项目
+- 有明确 Web/API 入口项目，例如 `*.Web.Entry/*.csproj`
+- 使用 `NuGet.config` 或项目内 NuGet 源配置 restore 依赖
+- 使用 `dotnet publish` 产出 `publish/`
+- Dockerfile 使用 ASP.NET runtime 基础镜像并 `COPY publish/ .`
+- 使用 Kaniko 构建镜像
+- 使用 `kubectl set image` 更新 Kubernetes Deployment 镜像
+
+.NET 模板的核心流程：
+
+```text
+package -> image -> deploy
+```
+
+对应实际动作：
+
+```text
+dotnet restore/publish 到 publish/ -> 构建并推送运行时镜像 -> kubectl set image 更新 K8S Deployment 镜像
+```
+
+参考 `nle-iot-cloud-service` 的默认规则：
+
+- .NET 8 使用 `image.server:8082/library/dotnet_sdk:8.0`
+- 设置 `DOTNET_CLI_TELEMETRY_OPTOUT=1`、`DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1`、`NUGET_HTTP_TIMEOUT=300`
+- 设置 `PUBLISH_DIR=$CI_PROJECT_DIR/publish`
+- 设置 `NUGET_PACKAGES=$CI_PROJECT_DIR/.nuget/packages`
+- NuGet 缓存 key 使用 `$CI_PROJECT_NAME-nuget`
+- restore 命令使用入口 `.csproj`、`-r linux-x64`，存在 `NuGet.config` 时加 `--configfile NuGet.config`
+- publish 命令使用入口 `.csproj`、`--no-restore -r linux-x64 --framework net8.0 -c Release -o "$PUBLISH_DIR" --self-contained false`
+- package job 将 `publish/` 作为 artifact 传给 image job
+- image job 使用 Kaniko，默认 `--context "$CI_PROJECT_DIR"` 和 `--dockerfile "$CI_PROJECT_DIR/Dockerfile"`
+- 镜像 tag 默认使用 `${CI_COMMIT_REF_SLUG}_$(TZ=CST-8 date +%F-%H-%M-%S)`，并把 `IMAGE_URL`、`IMAGE_TAG` 写入 `build.env`
+- Dockerfile 应保留实际运行时入口，例如 `ENTRYPOINT ["/app/NIFCWeb.Web.Entry","--urls","http://*:5000"]`，但项目名、端口、基础镜像要按目标项目调整
+- 如果复用当前环境分支策略，.NET 流水线也只允许 `release-*` 和 `hotfix-*` 分支触发
+- `release-*` 分支执行 package、image、deploy
+- `hotfix-*` 分支只执行 package、image，默认跳过 deploy
+- `develop`、`main`、`master` 和其他分支默认不触发流水线
+
 ## 生成原则
 
 - 不盲目套模板。
 - 不给不需要部署的项目添加 deploy job。
 - Java Maven 服务的正常流程包含 deploy job，用于更新 K8S 中的镜像信息；只有用户明确说 CI-only、不部署或项目证据不支持部署时才省略。
 - Vue/Node.js 静态前端的正常流程包含 deploy job，deploy 在 `release-*` 分支执行；`hotfix-*` 分支只构建镜像，`develop` 分支不触发流水线。
+- .NET 服务的正常流程包含 deploy job，用于将 `publish/` 构建出的运行时镜像发布到 K8S；复用当前环境分支策略时，`release-*` 分支执行部署，`hotfix-*` 分支只构建镜像不部署，其他分支不触发；只有用户明确说 CI-only、不部署或项目证据不支持部署时才省略 deploy。
 - 不给没有 Dockerfile 的项目强行添加 image job。
 - 单模块 Java 项目不使用多模块的 `-pl $MODULE_NAME -am`。
 - Java Maven 项目先检测 JDK 版本，再选择对应内网 Maven 镜像；如果无法判断 JDK 8 或 JDK 17，应先询问确认。
 - Java Maven 构建必须校验并使用 `MAVEN_SETTINGS_XML`，所有 Maven 命令都要带 `-s $MAVEN_SETTINGS_XML`。
 - Node/Vue 项目先检测 Node 版本和包管理器，再选择对应 Node 构建镜像和安装命令。
+- .NET 项目先检测入口 `.csproj`、目标框架、`NuGet.config`、Dockerfile，再选择 SDK 镜像和 restore/publish 命令。
+- .NET 默认发布到 `$CI_PROJECT_DIR/publish` 并把 `publish/` 作为 artifact 传给 Kaniko image job。
+- .NET NuGet 缓存必须放在 `$CI_PROJECT_DIR/.nuget/packages`，cache key 必须包含 `$CI_PROJECT_NAME`，例如 `$CI_PROJECT_NAME-nuget`。
 - Node/Vue 默认不生成测试或 lint job；只有用户明确要求或项目已有明确 CI 规则时才生成。
 - Node/Vue 默认缓存 `.npm/` 包下载缓存，不缓存 `node_modules/`。
+- 所有依赖缓存 key 都必须按项目隔离并包含 `$CI_PROJECT_NAME`，例如 Java 使用 `$CI_PROJECT_NAME-maven`，Node/Vue 使用 `$CI_PROJECT_NAME-web-npm`。
 - Node/Vue 默认使用 `https://registry.npmmirror.com` 作为 npm/pnpm 安装源；如果项目使用私有 npm 仓库或 `.npmrc`，优先保留项目配置。
 - Node/Vue package job 默认设置 `HUSKY=0`，CI 中不安装或执行 Husky hooks。
 - 默认不设置 `artifacts.expire_in`，所有产物过期时间使用 GitLab 系统/项目默认设置；只有用户明确要求具体保留时间时才生成 `artifacts.expire_in`。
@@ -235,6 +289,6 @@ npm 缓存策略：
 - `CI_REGISTRY_PASSWORD`
 - `WECHAT_WEBHOOK`：仅在要求生成发布/部署/镜像通知时需要
 
-前端项目通常不需要 `MAVEN_SETTINGS_XML`。Node/Vue 默认设置 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com`，pnpm 安装命令同时显式追加 `--registry=https://registry.npmmirror.com`。如果使用私有 npm 仓库，可能还需要 `NPM_TOKEN`、scope registry 或项目特定的 npm 认证变量。
+前端项目和 .NET 项目通常不需要 `MAVEN_SETTINGS_XML`。Node/Vue 默认设置 `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com`，pnpm 安装命令同时显式追加 `--registry=https://registry.npmmirror.com`。如果使用私有 npm 仓库，可能还需要 `NPM_TOKEN`、scope registry 或项目特定的 npm 认证变量。.NET 项目如果使用私有 NuGet 源，应通过 `NuGet.config` 和 GitLab CI/CD Variables 注入凭据，不要在 `.gitlab-ci.yml` 里硬编码账号密码。
 
 实际变量以生成后的 `.gitlab-ci.yml` 为准。
