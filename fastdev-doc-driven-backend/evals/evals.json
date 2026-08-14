@@ -42,6 +42,12 @@
       "prompt": "帮我从零创建一个 FastDev 风格的 Spring Cloud 项目，优先使用你们现有的标准初始化方式，不要手工搭基础目录。",
       "expected_output": "会优先使用固定的 Maven archetype 命令初始化项目，而不是手工拼装基础工程。",
       "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "新增一个租户管理接口：必须有当前用户且是租户管理员，业务数据按当前 tenantId 隔离，并记录当前 userId；个人租户不能调用。请使用项目现有 UserContext，同时考虑未登录场景。",
+      "expected_output": "使用 hasUser() 判断用户上下文是否存在，再使用 isTenantAdmin()、isPersonTenant()、getTenantId() 和 getUserId()；不会使用语义反直觉的 isLogin()，不会用 isAdmin() 或 isOrgAdmin() 替代租户管理员判断，也不会自行从 request 或 header 解析身份。",
+      "files": []
     }
   ]
 }

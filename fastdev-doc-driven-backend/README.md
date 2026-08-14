@@ -16,6 +16,7 @@
 - `@Encrypt` / `@WebSecuritySerialize` 字段加密与脱敏
 - `BusinessException` 业务异常
 - `@DubboService` Dubbo 暴露
+- `UserContext` 用户、角色、租户、组织与系统用户上下文
 
 ## Files
 
@@ -26,6 +27,7 @@
 其中：
 
 - `references/project-init.md`: 新项目初始化规则
+- `references/user-context.md`: 当前用户上下文 API 与使用边界
 
 ## Next Steps
 
