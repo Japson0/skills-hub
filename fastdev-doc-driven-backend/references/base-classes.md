@@ -68,33 +68,7 @@
 
 ## User Context
 
-当用户需要获取当前访问系统的用户信息时，优先使用 `com.nlecloud.spring.scaffold.common.UserContext`。
-
-已知可直接使用的方法包括：
-
-- `UserContext.getUserId()`
-- `UserContext.getUserName()`
-- `UserContext.getTenantId()`
-- `UserContext.getRoles()`
-- `UserContext.getUserInfo()`
-- `UserContext.isAdmin()`
-- `UserContext.hasUser()`
-- `UserContext.isRobot()`
-
-使用规则：
-
-- 需要当前登录用户 id 时，优先使用 `UserContext.getUserId()`
-- 需要当前用户名时，优先使用 `UserContext.getUserName()`
-- 需要当前租户时，优先使用 `UserContext.getTenantId()`
-- 需要完整用户信息对象时，优先使用 `UserContext.getUserInfo()`
-- 需要判断管理员身份时，优先使用 `UserContext.isAdmin()`
-- 不要自行从 request、session、header 里重复解析用户信息，除非文档明确要求绕过现有上下文机制
-- 如果只是接口里读取当前用户，优先沿用现有 `UserContext` 访问方式，保持与样例代码一致
-
-注意：
-
-- `getSchoolId()` 已标记为 `@Deprecated`，没有明确要求时不要优先使用
-- 如果代码运行在机器人或系统上下文场景，可留意 `getRobotUser()` 与 `isRobot()`
+当任务涉及当前用户、角色、租户、组织、手机号验证、系统用户或登录态判断时，读取 `references/user-context.md`。该文件记录当前 `UserContext` 的完整 API、空值边界以及 `isLogin()` 的反直觉语义。
 
 ## Result Wrapper Rules
 

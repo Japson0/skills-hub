@@ -23,6 +23,8 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
   适用于表名转类名、前缀裁剪、包路径、RESTful 路径命名
 - `references/validation.md`
   适用于参数校验、自定义 validation 注解、枚举生成规则、逻辑删除、i18n 文案规则
+- `references/user-context.md`
+  适用于读取当前用户、角色、租户、组织、手机号验证状态，以及处理系统用户和登录态判断
 
 ## 适用场景
 
@@ -74,7 +76,8 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 
 ## 按场景读取
 
-- 如果任务涉及基础类复用、是否重复生成 CRUD、是否存在 RESTful 冲突、如何获取当前登录用户、如何选择 `RestResult` 或 `RestResponse`、如何抛业务异常，读取 `references/base-classes.md`
+- 如果任务涉及基础类复用、是否重复生成 CRUD、是否存在 RESTful 冲突、如何选择 `RestResult` 或 `RestResponse`、如何抛业务异常，读取 `references/base-classes.md`
+- 如果任务涉及当前用户、角色、租户、组织、管理员权限、手机号验证、系统用户或登录态，读取 `references/user-context.md`
 - 如果任务涉及从零创建项目或初始化基础工程，读取 `references/project-init.md`
 - 如果任务涉及单表 CRUD、分页、自定义分页、Mapper 或 XML，读取 `references/crud.md`
 - 如果任务涉及类名推导、表名前缀处理、包路径或 RESTful 命名，读取 `references/naming.md`
@@ -138,6 +141,7 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 - 是否有国际化错误提示
 - 是否有统一异常约定
 - 是否要兼容已有 API 或 Dubbo 接口
+- 是否依赖当前用户、租户或组织上下文，入口是否保证已经登录
 
 ## 输出模式
 
@@ -212,6 +216,7 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 - `这个模块继承 BaseController4DTO 就行，只额外帮我补一个自定义分页查询接口，其他简单 CRUD 不要重复写`
 - `这个模块的 Service 直接继承 BaseService4DTO，基础增删改查和基础分页不要重复定义，只补一个带联表条件的自定义分页查询`
 - `根据表 agi_agent_charging 生成相关类，命名要按团队规范处理，尽量去掉统一前缀后再生成类名，同时包路径要直接沿用当前工程风格`
+- `新增一个只有租户管理员能调用的接口，从 UserContext 获取 tenantId 和 userId，并兼容未登录场景`
 
 ## 缺失信息处理
 
