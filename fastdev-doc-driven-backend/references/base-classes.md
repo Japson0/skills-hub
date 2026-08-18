@@ -2,6 +2,8 @@
 
 在 FastDev 风格工程里，先判断基础类已经覆盖了什么，再决定要不要补代码。
 
+下面记录的 `BaseController4DTO`、`BaseService4DTO` 方法签名和 HTTP 动词是该工程的默认基线。不同工程的基础类版本可能存在差异，套用前先打开目标工程中基础类源码或相邻模块样例进行确认；存在差异时以目标工程实际实现为准，并向用户指出差异。
+
 ## BaseController4DTO
 
 已知 `BaseController4DTO<ID, T, DTO>` 内置以下接口：
@@ -16,7 +18,18 @@
 - 如果模块继承 `BaseController4DTO`，不要重复声明新增、更新、删除、详情接口
 - 如果用户只说“生成单表 CRUD”，先默认复用这 4 个基础接口
 - 只有用户明确要求扩展接口时，才新增 Controller 方法
-- 分页接口不默认创建，只有用户明确要求自定义分页时才补充
+
+## 分页接口暴露规则
+
+`BaseService4DTO` 提供了基础分页能力 `getPage(PageRequest)`，但 `BaseController4DTO` 默认不暴露分页接口。这是有意为之：并非所有 CRUD 模块都需要对外提供列表分页查询，避免无意义的接口暴露。
+
+根据用户需求区分三种情况：
+
+- 基础 CRUD（C/U/D + 单条 R）：不需要补任何分页代码
+- 基础分页：用户明确要求“分页查询”但不涉及联表或复杂条件，直接在 Controller 补一个调用 `getPage()` 的接口即可，不需要自定义 Mapper 或 XML
+- 自定义分页：用户明确要求联表、复杂条件或定制 SQL，才新增 Mapper 方法、XML SQL 和扩展 Service 方法
+
+不要把基础分页误当成自定义分页去生成 Mapper 和 XML。
 
 ## RESTful Conflict
 
@@ -94,9 +107,9 @@
 
 当前工程的业务异常统一使用 `com.nlecloud.spring.common.exception.BusinessException`，它继承 `net.github.fastdev.common.exception.CommonException`，并通过 `I18nUtils.getMessage(i18nKey, locale, args)` 解析异常消息，因此业务异常的内容必须以 i18n key 的形式提供，不允许把中文或英文业务文案直接作为异常内容传入。
 
-### BusinessException 的规范定义
+### BusinessException 的参考定义
 
-`BusinessException` 的固定结构如下，生成代码时必须严格遵循这个类定义，不要自行改名、改包、改构造函数或改解析方式：
+下面是 `BusinessException` 的参考结构，用来在使用时识别构造函数和 i18n 解析方式。注意：skill 不会自动创建该公共类，详见“复用规则”。
 
 ```java
 package com.nlecloud.spring.common.exception;
@@ -139,12 +152,12 @@ public class BusinessException extends CommonException {
 }
 ```
 
-### 何时需要创建 BusinessException 类文件
+### 复用规则
 
-- 如果当前工程中已存在 `com.nlecloud.spring.common.exception.BusinessException`，直接复用，不要重复生成
-- 如果当前工程中确实不存在该类，按上面的定义在工程的 common 模块对应源码目录下创建：`src/main/java/com/nlecloud/spring/common/exception/BusinessException.java`
-- 创建时保留 `I18nUtils`、`CommonError`、`CommonException` 的依赖路径，不要替换成其他 i18n 工具或异常基类
-- 不要为了省事把该类下沉到业务模块或改成局部异常类
+- 业务异常统一使用目标工程中已有的 `com.nlecloud.spring.common.exception.BusinessException`
+- 使用前先打开目标工程源码确认该类存在，并核对构造函数与参考定义是否一致
+- 如果目标工程不存在该类，不要自动创建公共异常类，也不要下沉到业务模块造一个局部 `BusinessException`，先向用户说明情况并确认下一步
+- 如果目标工程的 `BusinessException` 构造函数与参考定义不同，以目标工程实际签名为准
 
 ### 构造函数选用规则
 
@@ -159,20 +172,9 @@ public class BusinessException extends CommonException {
 
 - 业务异常的内容必须通过 i18n key 提供，由 `I18nUtils.getMessage(i18nKey, locale, args)` 解析后作为异常 message
 - 传入的第一个字符串参数一定是 i18n key（例如 `tenant.permission.denied`），而不是中文文案或英文文案
-- 对应的 i18n key 必须能在工程现有的国际化资源文件中找到，否则应在生成代码时同步补 key，详见 `references/validation.md` 的 I18n Message Rules
+- 对应的 i18n key 必须能在工程现有的国际化资源文件中找到，否则应在生成代码时同步补 key，i18n key 的选择与合并规则统一见 `references/validation.md` 的 I18n Message Rules
 - 如果已有 `CommonError`，其 `code` 会作为 i18n key，确保该 code 已在 i18n 资源中定义
 - 不要为了“简单提示”就把异常文案硬编码进构造函数，例如 `new BusinessException("当前用户没有权限")` 是错误的写法
-
-### i18n key 合并原则
-
-选择异常使用的 i18n key 时，遵循“相同语义合并为同一个 key、不宜过多”的原则：
-
-- 新抛一个异常前，先检索现有 i18n 资源文件，确认是否已有语义相同的 key：有则直接复用，没有再新增
-- 语义相同的异常文案应共用一个 key，不要按模块或接口拆分：例如“无权限操作”统一走 `common.unauthorized`，不要给 `user.unauthorized`、`agent.unauthorized` 各造一个
-- 只有当异常的业务语义确实不同、文案需要差异化时，才拆分新 key：例如“无权限操作”和“租户管理员才能操作”是不同语义，应分别定义
-- 检索时优先按中文语义匹配，而不是按 key 命名匹配：`common.unauthorized=无权限操作` 和 `agent.no.permission=无权限操作` 视为重复，应统一为前者
-- 宁可一个 key 被多处异常复用，也不要为了“专属”而扩散出一堆同义 key
-- 如果一个新增异常提示和现有某 key 语义高度重合但文案略不同，优先对齐到现有 key 的文案，而不是新增
 
 ### 默认异常选择
 

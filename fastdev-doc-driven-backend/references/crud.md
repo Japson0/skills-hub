@@ -35,37 +35,43 @@
 
 ## Paging Rules
 
-- 分页接口不默认创建
-- 只有在用户明确要求“自定义分页查询”时，才补分页接口
-- 自定义分页优先使用 `PageRequest<T>`、`PageResponse<T>`、`PageWrapper`
-- 简单分页优先复用基础 Service 的 `getPage`
-- 复杂分页、联表或定制条件时，再新增 Mapper 方法和 XML SQL
+分页对外暴露是按需的，避免无意义的接口暴露。根据用户需求区分三种情况：
+
+- 基础 CRUD：不需要补任何分页代码
+- 基础分页：用户明确要求“分页查询”但不涉及联表或复杂条件，直接在 Controller 补一个调用基础 Service `getPage()` 的接口即可，不需要自定义 Mapper 或 XML
+- 自定义分页：用户明确要求联表、复杂条件或定制 SQL，才新增 Mapper 方法、XML SQL 和扩展 Service 方法
+
+不要把基础分页误当成自定义分页去生成 Mapper 和 XML。
+
+基础分页优先使用 `PageRequest<T>`、`PageResponse<T>`、`PageWrapper`；自定义分页同样复用这套分页对象。
 
 如果用户需要自定义查询分页，优先参考现有模式：
 
 Mapper 方法示例：
 
 ```java
-IPage<UserDTO> customPage(IPage page, @Param(Constants.WRAPPER) QueryWrapper<UserEntity> wrapper);
+IPage<UserDTO> customPage(IPage<UserDTO> page, @Param(Constants.WRAPPER) QueryWrapper<UserEntity> wrapper);
 ```
 
 XML 示例：
 
 ```xml
-<select id="customPage" resultType="com.nledu.cloud.server1.domain.dto.UserDTO">
-    SELECT * FROM userinfo
+<select id="customPage" resultType="com.nledu.cloud.server1.model.dto.UserDTO">
+    SELECT u.id, u.username, u.phone
+    FROM userinfo u
     ${ew.customSqlSegment}
 </select>
 ```
 
 自定义分页规则：
 
-- Mapper 方法优先接收 `IPage page` 和 `@Param(Constants.WRAPPER) QueryWrapper<Entity> wrapper`
+- Mapper 方法优先接收 `IPage<DTO>`（或目标工程样例中固定使用的等价签名）和 `@Param(Constants.WRAPPER) QueryWrapper<Entity> wrapper`
 - 返回类型优先使用 `IPage<DTO>`
 - ServiceImpl 中优先通过 `PageWrapper` 包装 `PageRequest`
 - 调用 Mapper 时优先使用 `pageWrapper` 和 `pageWrapper.buildQueryWrapper()`
 - XML 中优先通过 `${ew.customSqlSegment}` 拼接已有查询条件
-- `resultType` 应与 DTO 全限定类名保持一致
+- `${ew.customSqlSegment}` 只能使用由框架 `QueryWrapper` 构建出的条件片段，不能把客户端传入的原始 SQL 字符串拼接进 XML
+- `resultType` 应与 DTO 全限定类名保持一致，并符合项目包路径规范（默认 `...model.dto.*DTO`）
 - `namespace`、方法名、返回类型必须与 Mapper 接口严格对应
 - 如果现有工程已经存在固定写法，优先保持与样例完全一致，不擅自改造成其他分页方案
 

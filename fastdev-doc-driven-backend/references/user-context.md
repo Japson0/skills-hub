@@ -2,6 +2,8 @@
 
 当前工程通过 `com.nlecloud.spring.scaffold.common.UserContext` 保存和读取当前线程的用户信息。业务代码应复用该上下文，不要自行从 request、session 或 header 重复解析用户身份。
 
+下面记录的 API、空值边界和 `isLogin()` 语义是该工程的默认基线。不同工程的 `UserContext` 实现版本可能存在差异，套用前先打开目标工程中 `UserContext` 源码或相邻模块样例进行确认；存在差异时以目标工程实际实现为准，并向用户指出差异。
+
 ## 可用能力
 
 用户基本信息：

@@ -3,56 +3,56 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "根据表 agi_agent_charging 生成单表 CRUD。请先根据表结构识别枚举字段并生成继承 ComEnum<Integer> 的枚举类，类名尽量去掉统一前缀后再命名，同时包路径直接沿用当前工程结构。",
-      "expected_output": "会先要求或使用表结构，优先生成枚举类，并按现有工程包路径输出符合命名规范的 Entity、DTO、Query、Req、Mapper、Service、Controller。",
+      "prompt": "根据表 agi_agent_charging 生成单表 CRUD。",
+      "expected_output": "由于 prompt 只给了表名、没有字段清单或建表 SQL，不得开始生成 Entity/DTO/Query 等代码，也不得编造字段或枚举取值；应只向用户索要表结构这一个关键信息，最多附带一句说明为什么要表结构。不应直接输出完整 CRUD 类。",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "这个模块继承 BaseController4DTO 和 BaseService4DTO。简单增删改查不要重复生成，只额外补一个自定义分页查询接口。",
-      "expected_output": "会复用基础 Controller 和基础 Service，不重复生成基础 CRUD，只补自定义分页相关扩展代码。",
+      "prompt": "这个模块继承项目里的基础 Controller 和基础 Service。简单增删改查不要重复生成，只额外补一个分页查询接口：就是普通的单表分页，没有联表，也没有复杂条件。",
+      "expected_output": "识别为“基础分页”而非“自定义分页”：复用基础 Service 的分页能力，只补一个调用 getPage 的 Controller 接口，不应新增 Mapper 方法或 XML SQL，也不应自定义分页 SQL。",
       "files": []
     },
     {
       "id": 3,
-      "prompt": "请按现有 FastDev 样例补一个自定义分页查询，Mapper 方法签名沿用 IPage page + QueryWrapper<Entity> wrapper，XML 里通过 ${ew.customSqlSegment} 拼接条件，Query 对象优先使用 @QueryField 和 Operation 表达查询条件。",
-      "expected_output": "会生成与现有样例一致的自定义分页链路，包括 IPage<DTO> 的 Mapper 方法、PageWrapper 的 ServiceImpl 调用方式、带 @QueryField 的 Query 对象，以及在 XML 中使用 ${ew.customSqlSegment} 的 SQL。",
+      "prompt": "帮我补一个自定义分页查询：需要联表、带多条件。Query 对象要能表达模糊查询和集合查询。",
+      "expected_output": "生成自定义分页链路：Mapper 方法返回 IPage<DTO> 并接收 @Param(Constants.WRAPPER) QueryWrapper<Entity>；XML 中使用 ${ew.customSqlSegment} 拼接条件且 resultType 为 DTO 全限定名；ServiceImpl 通过 PageWrapper 调用；Query 对象用 @QueryField + Operation.LIKE / Operation.IN 描述条件。不得把客户端原始 SQL 字符串拼接进 XML。",
       "files": []
     },
     {
       "id": 4,
-      "prompt": "参考现有后端规范，新增一个用户更新接口的请求对象和 Controller 参数校验。名称字段只允许中文、英文字母、数字和下划线，手机号需要做手机号格式校验，邮箱使用标准邮箱校验，更新接口要走 Update 分组校验。请按项目习惯生成代码。",
-      "expected_output": "能够正确生成请求对象字段校验，优先使用内置注解如 GeneralWithChinese、Phone，以及 @Validated(Update.class) 的 Controller 写法。",
+      "prompt": "参考现有后端规范，新增一个用户更新接口的请求对象和 Controller 参数校验。名称只允许中文、英文字母、数字和下划线，手机号要校验格式，邮箱用标准邮箱校验，更新接口走 Update 分组。",
+      "expected_output": "生成请求对象并标注校验注解：名称用 @GeneralWithChinese，手机号用 @Phone，邮箱用 @Email；Controller 参数使用 @Validated(Update.class) @RequestBody。不得遗漏 @Email，也不得给所有字段无依据地堆校验。",
       "files": []
     },
     {
       "id": 5,
       "prompt": "请按现有框架规范设计一个实体，包含 password、phone、is_delete 字段。password 需要摘要加密存储，phone 需要可逆加密，is_delete 按逻辑删除字段映射。",
-      "expected_output": "会让实体实现 CryptAble，对 password 使用 @Encrypt(EncryptType.SM3)，对 phone 使用 @Encrypt(EncryptType.SM4)，并把 is_delete 映射成 boolean delete + @TableLogic。",
+      "expected_output": "实体实现 CryptAble；password 使用 @Encrypt(EncryptType.SM3)；phone 使用 @Encrypt(EncryptType.SM4)；is_delete 映射为 boolean delete + @TableLogic，不在业务代码中手动维护删除标记值，也不把加密逻辑写进 Controller/Service。",
       "files": []
     },
     {
       "id": 6,
-      "prompt": "新增一个获取当前登录用户信息的接口，并按现有规范返回结果和抛出异常：默认走 RestResult 和预置 i18n；异常默认使用 BusinessException；如果用户明确说不需要 i18n，再改用 RestResponse 或 CommonException。",
-      "expected_output": "会优先使用 UserContext 获取当前用户信息，默认使用 RestResult 返回、BusinessException 抛错，并只在用户明确不要 i18n 时切换到 RestResponse 或 CommonException。",
-      "files": []
-    },
-    {
-      "id": 9,
-      "prompt": "现有工程需要新增一个业务校验：当用户不是租户管理员时抛出业务异常，提示“当前用户没有租户管理权限”。请按现有规范生成异常抛出代码，并补齐对应的国际化资源。要求使用项目统一的 BusinessException，异常内容必须走 i18n。",
-      "expected_output": "会使用 com.nlecloud.spring.common.exception.BusinessException 抛出异常，构造函数第一个字符串参数是 i18n key（例如 tenant.permission.denied），而不是中文文案；先检索现有 i18n 资源是否已有同义 key，有则复用，没有再在 messages.properties 和 messages_en_US.properties 中补对应 key 的中英文文案，且不为每个模块单独造同义 key。若工程中尚不存在 BusinessException 类，按 base-classes.md 中的固定类定义在 common 模块创建。",
+      "prompt": "新增一个获取当前登录用户信息的接口，按现有规范返回结果和抛出异常。",
+      "expected_output": "优先用 UserContext 获取当前用户；返回值默认用 RestResult；抛错默认用 BusinessException，构造参数走 i18n key；不得默认使用 RestResponse 或 CommonException，也不得抛裸 RuntimeException。",
       "files": []
     },
     {
       "id": 7,
-      "prompt": "帮我从零创建一个 FastDev 风格的 Spring Cloud 项目，优先使用你们现有的标准初始化方式，不要手工搭基础目录。",
-      "expected_output": "会优先使用固定的 Maven archetype 命令初始化项目，而不是手工拼装基础工程。",
+      "prompt": "帮我从零创建一个 FastDev 风格的 Spring Cloud 项目，用你们现有的标准初始化方式。",
+      "expected_output": "优先使用 Maven archetype:generate 命令（fast-archetype:spring-cloud-newland-archetype）初始化；执行前确认目标目录、groupId/artifactId/version/package、JDK/Maven、私服与 archetype 可解析性；archetype 不可用时停止并报告，不手工搭替代架构。",
       "files": []
     },
     {
       "id": 8,
       "prompt": "新增一个租户管理接口：必须有当前用户且是租户管理员，业务数据按当前 tenantId 隔离，并记录当前 userId；个人租户不能调用。请使用项目现有 UserContext，同时考虑未登录场景。",
-      "expected_output": "使用 hasUser() 判断用户上下文是否存在，再使用 isTenantAdmin()、isPersonTenant()、getTenantId() 和 getUserId()；不会使用语义反直觉的 isLogin()，不会用 isAdmin() 或 isOrgAdmin() 替代租户管理员判断，也不会自行从 request 或 header 解析身份。",
+      "expected_output": "先用 hasUser() 判断上下文是否存在，再用 isTenantAdmin()、isPersonTenant()、getTenantId()、getUserId()；不得使用语义反直觉的 isLogin()，不得用 isAdmin() 或 isOrgAdmin() 替代租户管理员判断，也不得自行从 request/header 解析身份。",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "新增一个业务校验：当用户不是租户管理员时抛出业务异常，提示“当前用户没有租户管理权限”，并补齐对应的国际化资源。",
+      "expected_output": "使用项目已有的 BusinessException；构造参数是 i18n key 而非中文文案；先检索现有 i18n 资源是否已有同义 key，有则复用，没有再在对应 messages 文件补中英文 key，且不为该模块单独造同义 key。若工程中不存在 BusinessException，不得自动创建公共异常类，应向用户说明并确认。",
       "files": []
     }
   ]

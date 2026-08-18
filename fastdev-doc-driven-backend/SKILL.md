@@ -73,15 +73,24 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 - 能复用已有模式就不要重复发明辅助类。
 - 文档没写清楚时，不要凭空虚构字段、错误码、业务规则。
 - 如果文档和样例冲突，先指出冲突，再按用户意图决定跟文档还是跟现有代码。
+- reference 中的基础类方法、HTTP 动词、`UserContext` 行为是默认基线，套用前先检查目标工程源码或相邻样例；存在差异时以目标工程实际实现为准。
 
 ## 按场景读取
 
-- 如果任务涉及基础类复用、是否重复生成 CRUD、是否存在 RESTful 冲突、如何选择 `RestResult` 或 `RestResponse`、如何抛业务异常，读取 `references/base-classes.md`
-- 如果任务涉及当前用户、角色、租户、组织、管理员权限、手机号验证、系统用户或登录态，读取 `references/user-context.md`
-- 如果任务涉及从零创建项目或初始化基础工程，读取 `references/project-init.md`
-- 如果任务涉及单表 CRUD、分页、自定义分页、Mapper 或 XML，读取 `references/crud.md`
-- 如果任务涉及类名推导、表名前缀处理、包路径或 RESTful 命名，读取 `references/naming.md`
-- 如果任务涉及参数校验、自定义校验注解、校验分组、枚举生成、逻辑删除或 i18n 文案，读取 `references/validation.md`
+reference 文件记录的是该工程的默认基线规则。但不同工程的基础类版本、签名、包路径、`UserContext` 实现细节可能存在差异。因此，在套用 reference 中的具体 API、方法签名、HTTP 动词或上下文行为前，先打开目标工程中已有源码或相邻样例模块进行确认。只有当目标工程与 reference 描述一致时，才直接套用；存在差异时，以目标工程实际实现为准，并向用户指出差异。
+
+reference 之间不是孤立的，一次任务通常需要同时读取多个文件。按下表组合加载：
+
+| 任务场景 | 必读 | 按需追加 |
+| --- | --- | --- |
+| 单表 CRUD、分页、自定义分页 | `references/crud.md`、`references/base-classes.md`、`references/naming.md` | 涉及校验、枚举、加密、逻辑删除、i18n 时追加 `references/validation.md` |
+| 业务异常与返回包装 | `references/base-classes.md` | 涉及 i18n key 选择时追加 `references/validation.md` |
+| 用户、角色、租户、组织、登录态 | `references/user-context.md`、`references/base-classes.md` | 涉及异常或 i18n 时追加 `references/validation.md` |
+| 参数校验、枚举、加密、逻辑删除、i18n 文案 | `references/validation.md` | 涉及实体或 Controller 生成时追加 `references/crud.md`、`references/base-classes.md` |
+| 类名推导、包路径、RESTful 命名 | `references/naming.md` | 涉及 CRUD 或基础类复用时追加 `references/crud.md`、`references/base-classes.md` |
+| 从零创建项目或初始化基础工程 | `references/project-init.md` | 初始化完成后再按实际业务场景加载上面对应文件 |
+
+只按单个文件路由容易只拿到半套规则，例如 CRUD 任务如果不读 `base-classes.md`，就不知道基础类已经覆盖了哪些接口，容易重复生成。
 
 ## 识别这个工程的典型模式
 

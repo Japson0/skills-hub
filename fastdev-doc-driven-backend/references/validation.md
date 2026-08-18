@@ -107,11 +107,14 @@ private boolean delete;
 
 当前工程已集成 i18n。生成或修改返回信息时，优先复用并补充现有国际化资源文件，而不是把业务文案硬编码散落在代码里。
 
+本文件是 i18n 的唯一权威来源：接口返回消息、业务异常消息、成功/失败提示的 i18n key 选择与合并规则都在这里定义，其他 reference 只引用本节，不再重复。
+
 已知约定：
 
 - `resources/i18n/messages.properties` 作为默认消息文件，默认中文
 - `resources/i18n/messages_en_US.properties` 作为英文消息文件
 - 如工程存在 `messages_zh_CN.properties`，优先保持与现有结构一致
+- 先定位实际 `spring.messages.basename` 和资源所属模块，再决定补到哪个文件；不要在多模块工程里把资源写到错误模块
 
 使用规则：
 
@@ -135,7 +138,9 @@ i18n key 的核心原则是：尽量把相同语义的文案合并成同一个 k
 - 宁可一个 key 被多处复用，也不要为了“看起来专属”而扩散出一堆同义 key
 - 如果一个新增提示和现有某 key 语义高度重合但文案略不同，优先对齐到现有 key 的文案，而不是新增
 
-业务异常使用的 i18n key 同样要遵守上面的规则。抛出 `BusinessException` 时传入的 i18n key 必须能在现有国际化资源文件中找到；如果文档要求的是新业务提示，应同步在 `messages.properties` 和 `messages_en_US.properties` 中补 key，而不是把业务文案直接塞进异常构造函数。详见 `references/base-classes.md` 的 Exception Rules。
+### 业务异常与 i18n
+
+抛出 `BusinessException` 时传入的 i18n key 同样要遵守上面的规则。异常构造函数第一个字符串参数必须是 i18n key，而不是中文或英文文案；该 key 必须能在现有国际化资源文件中找到，否则应同步补 key，而不是把业务文案直接塞进异常构造函数。详见 `references/base-classes.md` 的 Exception Rules。
 
 正确写法：
 
