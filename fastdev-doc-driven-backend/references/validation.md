@@ -124,6 +124,20 @@ private boolean delete;
 - 如果框架里已有预置 i18n 成功/失败消息，优先复用，不要重复新增同义 key
 - 只有在用户明确要求“不返回 i18n”时，才不走国际化返回包装
 
+业务异常使用的 i18n key 同样要遵守上面的规则。抛出 `BusinessException` 时传入的 i18n key 必须能在现有国际化资源文件中找到；如果文档要求的是新业务提示，应同步在 `messages.properties` 和 `messages_en_US.properties` 中补 key，而不是把业务文案直接塞进异常构造函数。详见 `references/base-classes.md` 的 Exception Rules。
+
+正确写法：
+
+```java
+throw new BusinessException("tenant.permission.denied");
+```
+
+错误写法（把文案当 i18n key）：
+
+```java
+throw new BusinessException("当前用户没有租户管理权限");
+```
+
 推荐示例：
 
 - `common.create.success=新增成功`

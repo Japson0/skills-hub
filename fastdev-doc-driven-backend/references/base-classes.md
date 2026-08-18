@@ -92,27 +92,86 @@
 
 ## Exception Rules
 
-当前工程默认优先使用带 i18n 能力的 `com.nlecloud.spring.common.exception.BusinessException` 抛业务异常。
+当前工程的业务异常统一使用 `com.nlecloud.spring.common.exception.BusinessException`，它继承 `net.github.fastdev.common.exception.CommonException`，并通过 `I18nUtils.getMessage(i18nKey, locale, args)` 解析异常消息，因此业务异常的内容必须以 i18n key 的形式提供，不允许把中文或英文业务文案直接作为异常内容传入。
 
-已知规则：
+### BusinessException 的规范定义
 
-- `BusinessException(CommonError commonError)` 使用预置错误码与 i18n 消息
-- `BusinessException(String i18nKey, Object... args)` 使用指定 i18n key
-- `BusinessException(Throwable throwable, String i18nKey, Object... args)` 支持包装原异常并返回 i18n 消息
-- `BusinessException` 底层继承 `CommonException`
+`BusinessException` 的固定结构如下，生成代码时必须严格遵循这个类定义，不要自行改名、改包、改构造函数或改解析方式：
 
-使用规则：
+```java
+package com.nlecloud.spring.common.exception;
 
-- 默认优先抛出 `BusinessException`
-- 如果异常信息需要国际化，优先使用 `BusinessException`
-- 如果已有 `CommonError` 可复用，优先使用 `new BusinessException(CommonError.XXX)`
-- 如果需要自定义国际化消息，优先使用 `new BusinessException("i18n.key", args...)`
+import com.nlecloud.spring.common.i18n.I18nUtils;
+import net.github.fastdev.common.exception.CommonError;
+import net.github.fastdev.common.exception.CommonException;
+
+import java.util.Locale;
+
+public class BusinessException extends CommonException {
+
+    public BusinessException(CommonError commonError) {
+        this(commonError.getCode());
+    }
+
+    public BusinessException(Throwable throwable, CommonError commonError) {
+        this(throwable, commonError.getCode());
+    }
+
+    public BusinessException(Throwable throwable, String code, CommonError commonError) {
+        this(throwable, code, commonError.getCode(), null);
+    }
+
+    public BusinessException(String i18nKey, Object... args) {
+        this(null, i18nKey, args);
+    }
+
+    public BusinessException(Throwable throwable, String i18nKey, Object... args) {
+        this(throwable, null, i18nKey, null, args);
+    }
+
+    public BusinessException(Throwable throwable, String i18nKey, Locale locale, Object... args) {
+        this(throwable, null, i18nKey, locale, args);
+    }
+
+    public BusinessException(Throwable throwable, String code, String i18nKey, Locale locale, Object... args) {
+        super(throwable, code, I18nUtils.getMessage(i18nKey, locale, args));
+    }
+}
+```
+
+### 何时需要创建 BusinessException 类文件
+
+- 如果当前工程中已存在 `com.nlecloud.spring.common.exception.BusinessException`，直接复用，不要重复生成
+- 如果当前工程中确实不存在该类，按上面的定义在工程的 common 模块对应源码目录下创建：`src/main/java/com/nlecloud/spring/common/exception/BusinessException.java`
+- 创建时保留 `I18nUtils`、`CommonError`、`CommonException` 的依赖路径，不要替换成其他 i18n 工具或异常基类
+- 不要为了省事把该类下沉到业务模块或改成局部异常类
+
+### 构造函数选用规则
+
+- 已有 `CommonError` 可复用时，优先 `new BusinessException(CommonError.XXX)`，框架会用 `commonError.getCode()` 作为 i18n key
+- 需要包装原异常并复用 `CommonError` 时，使用 `new BusinessException(throwable, CommonError.XXX)`
+- 需要自定义国际化消息时，使用 `new BusinessException("i18n.key", args...)`，第一个参数必须是 i18n key
+- 需要包装原异常并自定义国际化消息时，使用 `new BusinessException(throwable, "i18n.key", args...)`
+- 需要指定 `Locale` 时，使用 `new BusinessException(throwable, "i18n.key", locale, args...)`
+- 需要同时指定自定义 `code` 与 i18n key 时，使用 `new BusinessException(throwable, code, "i18n.key", locale, args...)`
+
+### i18n key 作为异常内容
+
+- 业务异常的内容必须通过 i18n key 提供，由 `I18nUtils.getMessage(i18nKey, locale, args)` 解析后作为异常 message
+- 传入的第一个字符串参数一定是 i18n key（例如 `tenant.permission.denied`），而不是中文文案或英文文案
+- 对应的 i18n key 必须能在工程现有的国际化资源文件中找到，否则应在生成代码时同步补 key，详见 `references/validation.md` 的 I18n Message Rules
+- 如果已有 `CommonError`，其 `code` 会作为 i18n key，确保该 code 已在 i18n 资源中定义
+- 不要为了“简单提示”就把异常文案硬编码进构造函数，例如 `new BusinessException("当前用户没有权限")` 是错误的写法
+
+### 默认异常选择
+
+- 默认优先抛出 `BusinessException`，因为它自带 i18n 能力
 - 只有在用户明确要求“不需要 i18n”时，才直接使用 `CommonException`
-- 如果用户需要新增自定义异常类，优先继承 `net.github.fastdev.common.exception.CommonException`
-- 不要默认为了省事直接抛裸 `RuntimeException`
+- 不要默认为了省事直接抛裸 `RuntimeException` 或 `IllegalArgumentException`
 
-自定义异常类规则：
+### 自定义异常类规则
 
 - 自定义异常类应继承 `CommonException`
 - 自定义异常类只在存在明确复用价值或领域语义时再创建
 - 如果只是单点业务异常，优先直接使用 `BusinessException` 或 `CommonException`
+- 不要再创建一个和 `BusinessException` 语义重复的局部业务异常类
