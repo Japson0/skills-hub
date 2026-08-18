@@ -124,6 +124,31 @@ private boolean delete;
 - 如果框架里已有预置 i18n 成功/失败消息，优先复用，不要重复新增同义 key
 - 只有在用户明确要求“不返回 i18n”时，才不走国际化返回包装
 
+### Key 合并原则
+
+i18n key 的核心原则是：尽量把相同语义的文案合并成同一个 key，而不是为每个调用点单独造一个。key 的数量应保持精简，不宜过多。
+
+- 新增提示前，先检索现有 i18n 资源文件，确认是否已有语义相同的 key：有则直接复用，没有再新增
+- 语义相同的文案应共用一个 key，不要按模块、按接口拆分：例如“新增成功”统一走 `common.create.success`，不要给 `user.create.success`、`agent.create.success` 各造一个
+- 只有当业务语义确实不同、文案需要差异化时，才拆分新 key：例如“新增成功”和“余额不足，请充值后再操作”是不同语义，应分别定义
+- 检索时优先按中文语义匹配，而不是按 key 命名匹配：`common.create.success=新增成功` 和 `user.add.success=新增成功` 视为重复，应统一为前者
+- 宁可一个 key 被多处复用，也不要为了“看起来专属”而扩散出一堆同义 key
+- 如果一个新增提示和现有某 key 语义高度重合但文案略不同，优先对齐到现有 key 的文案，而不是新增
+
+业务异常使用的 i18n key 同样要遵守上面的规则。抛出 `BusinessException` 时传入的 i18n key 必须能在现有国际化资源文件中找到；如果文档要求的是新业务提示，应同步在 `messages.properties` 和 `messages_en_US.properties` 中补 key，而不是把业务文案直接塞进异常构造函数。详见 `references/base-classes.md` 的 Exception Rules。
+
+正确写法：
+
+```java
+throw new BusinessException("tenant.permission.denied");
+```
+
+错误写法（把文案当 i18n key）：
+
+```java
+throw new BusinessException("当前用户没有租户管理权限");
+```
+
 推荐示例：
 
 - `common.create.success=新增成功`

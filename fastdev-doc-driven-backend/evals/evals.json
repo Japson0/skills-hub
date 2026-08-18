@@ -38,6 +38,12 @@
       "files": []
     },
     {
+      "id": 9,
+      "prompt": "现有工程需要新增一个业务校验：当用户不是租户管理员时抛出业务异常，提示“当前用户没有租户管理权限”。请按现有规范生成异常抛出代码，并补齐对应的国际化资源。要求使用项目统一的 BusinessException，异常内容必须走 i18n。",
+      "expected_output": "会使用 com.nlecloud.spring.common.exception.BusinessException 抛出异常，构造函数第一个字符串参数是 i18n key（例如 tenant.permission.denied），而不是中文文案；先检索现有 i18n 资源是否已有同义 key，有则复用，没有再在 messages.properties 和 messages_en_US.properties 中补对应 key 的中英文文案，且不为每个模块单独造同义 key。若工程中尚不存在 BusinessException 类，按 base-classes.md 中的固定类定义在 common 模块创建。",
+      "files": []
+    },
+    {
       "id": 7,
       "prompt": "帮我从零创建一个 FastDev 风格的 Spring Cloud 项目，优先使用你们现有的标准初始化方式，不要手工搭基础目录。",
       "expected_output": "会优先使用固定的 Maven archetype 命令初始化项目，而不是手工拼装基础工程。",
