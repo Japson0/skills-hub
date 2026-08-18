@@ -163,6 +163,17 @@ public class BusinessException extends CommonException {
 - 如果已有 `CommonError`，其 `code` 会作为 i18n key，确保该 code 已在 i18n 资源中定义
 - 不要为了“简单提示”就把异常文案硬编码进构造函数，例如 `new BusinessException("当前用户没有权限")` 是错误的写法
 
+### i18n key 合并原则
+
+选择异常使用的 i18n key 时，遵循“相同语义合并为同一个 key、不宜过多”的原则：
+
+- 新抛一个异常前，先检索现有 i18n 资源文件，确认是否已有语义相同的 key：有则直接复用，没有再新增
+- 语义相同的异常文案应共用一个 key，不要按模块或接口拆分：例如“无权限操作”统一走 `common.unauthorized`，不要给 `user.unauthorized`、`agent.unauthorized` 各造一个
+- 只有当异常的业务语义确实不同、文案需要差异化时，才拆分新 key：例如“无权限操作”和“租户管理员才能操作”是不同语义，应分别定义
+- 检索时优先按中文语义匹配，而不是按 key 命名匹配：`common.unauthorized=无权限操作` 和 `agent.no.permission=无权限操作` 视为重复，应统一为前者
+- 宁可一个 key 被多处异常复用，也不要为了“专属”而扩散出一堆同义 key
+- 如果一个新增异常提示和现有某 key 语义高度重合但文案略不同，优先对齐到现有 key 的文案，而不是新增
+
 ### 默认异常选择
 
 - 默认优先抛出 `BusinessException`，因为它自带 i18n 能力
