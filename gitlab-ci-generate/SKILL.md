@@ -5,10 +5,10 @@ license: MIT
 compatibility: Requires GitLab CI. Optional templates cover Java Maven, Vue/Node.js static frontend builds, .NET publish builds, Kaniko image builds, and Kubernetes deployment by kubectl.
 metadata:
   author: newland
-  version: "1.22"
+  version: "1.23"
 ---
 
-Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image on `release-*`; `hotfix-*` builds images but skips deployment. For .NET 8 services, the normal delivery flow is `dotnet restore`, `dotnet publish` to `publish/`, build/push a runtime image from that published artifact, then update the Kubernetes Deployment image. `main`/`master` can start stable image builds only when the commit is a merge commit from `release-*` or `hotfix-*`; these stable builds do not deploy to K8S. `develop` does not start pipelines by default.
+Generate a `.gitlab-ci.yml` for a project by first understanding the project, then choosing the smallest correct pipeline. For Java Maven services in this environment, the normal delivery flow is package JAR, build/push image, then update the Kubernetes Deployment image only on `develop`. For Vue/Node.js static frontends, the normal delivery flow is install dependencies, build static assets, build/push an nginx-based image, then update the Kubernetes Deployment image only on `develop`; `release-*` and `hotfix-*` build images but never deploy. For .NET 8 services, the normal delivery flow is `dotnet restore`, `dotnet publish` to `publish/`, build/push a runtime image from that published artifact, then update the Kubernetes Deployment image only on `develop`. `main`/`master` can start stable image builds only when the commit is a merge commit from `release-*` or `hotfix-*`; these stable builds do not deploy to K8S. `develop` is the only branch allowed to deploy to K8S.
 
 Treat `gitlab-cli.yml` in user prompts as likely meaning GitLab CI config. The actual file name should normally be `.gitlab-ci.yml` unless the user explicitly says otherwise.
 
@@ -72,9 +72,9 @@ stages:
 
 For Java Maven services, the normal pipeline shape is `package -> image -> deploy`: build the JAR, build/push the image, then update the Kubernetes Deployment image with `kubectl set image`. Use this end-to-end flow by default when the project has a Dockerfile or deployment convention and the user does not explicitly say CI-only/no-deploy.
 
-For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image on `release-*`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `release-*` can deploy, `hotfix-*` builds images but skips deploy, `main`/`master` can run stable image builds only from merge commits whose source branch is `release-*` or `hotfix-*`, and other branches including `develop` are skipped when this environment's policy applies.
+For Vue/Node.js static frontends, the normal pipeline shape is `package -> image -> deploy`: install dependencies, run the detected build script to produce static assets such as `dist/`, build/push an nginx-based image with Kaniko, then update the Kubernetes Deployment image only on `develop`. Use this by default when the project has `package.json`, a frontend build script, and a Dockerfile that copies static assets into nginx. Match the Java branch logic: `develop` can deploy, `release-*` and `hotfix-*` build images but skip deploy, `main`/`master` can run stable image builds only from merge commits whose source branch is `release-*` or `hotfix-*`, and other branches are skipped when this environment's policy applies.
 
-For .NET services, the normal pipeline shape is `package -> image -> deploy`: restore the entry `.csproj` with `NuGet.config` when present, publish for `linux-x64` to `$CI_PROJECT_DIR/publish`, build/push the runtime image with Kaniko from a Dockerfile that copies `publish/`, then update the Kubernetes Deployment image. Use this by default when the project has `.sln`/`.csproj`, a deployable web entry project, and a Dockerfile like this environment's .NET services. When following this environment's branch policy, .NET pipelines use the same allow-list as Java/Vue: `release-*` can package, build image, and deploy; `hotfix-*` packages and builds images but skips deploy; `main` and `master` run stable image builds only for merge commits from `release-*` or `hotfix-*` and skip deploy; all other branches, including `develop`, are skipped.
+For .NET services, the normal pipeline shape is `package -> image -> deploy`: restore the entry `.csproj` with `NuGet.config` when present, publish for `linux-x64` to `$CI_PROJECT_DIR/publish`, build/push the runtime image with Kaniko from a Dockerfile that copies `publish/`, then update the Kubernetes Deployment image. Use this by default when the project has `.sln`/`.csproj`, a deployable web entry project, and a Dockerfile like this environment's .NET services. When following this environment's branch policy, .NET pipelines use the same allow-list as Java/Vue: `develop` can package, build image, and deploy; `release-*` and `hotfix-*` package and build images but skip deploy; `main` and `master` run stable image builds only for merge commits from `release-*` or `hotfix-*` and skip deploy; all other branches are skipped.
 
 If the user asks for CI only, do not add deployment. If the project has no Dockerfile and the user did not ask for images, do not add image build jobs. For other project types without a documented environment pattern, keep using the smallest stage set that matches the request and project evidence.
 
@@ -94,13 +94,14 @@ Do not use generic cache keys such as `maven`, `npm`, `node`, `default`, or bran
 
 Prefer `workflow.rules` when the user wants pipelines only on specific branches.
 
-In this environment, `release-*` and `hotfix-*` branches should start pipelines automatically. `main` and `master` should start pipelines only when the commit is a GitLab merge commit whose source branch is `release-*` or `hotfix-*`. Use a positive allow-list rule for these cases, then `when: never` for everything else.
+In this environment, `develop`, `release-*`, and `hotfix-*` branches should start pipelines automatically. `main` and `master` should start pipelines only when the commit is a GitLab merge commit whose source branch is `release-*` or `hotfix-*`. Use a positive allow-list rule for these cases, then `when: never` for everything else.
 
 Example based on this repository:
 
 ```yaml
 workflow:
   rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_COMMIT_BRANCH =~ /^(release-.*|hotfix-.*)$/'
     - if: '$CI_COMMIT_BRANCH =~ /^(main|master)$/ && $CI_COMMIT_TITLE =~ /^Merge branch .*(release-.*|hotfix-.*).* into .*(main|master).*$/'
     - when: never
@@ -110,10 +111,11 @@ For job-level rules, use `rules.changes` to avoid running unrelated service jobs
 
 If following this repository's branch policy:
 
-- `release-*`: package, image, and deploy can run when relevant files change.
-- `hotfix-*`: package and image can run, but deploy jobs are skipped by default.
+- `develop`: package, image, and deploy can run when relevant files change; this is the only branch that can deploy to K8S.
+- `release-*`: package and image can run, but deploy jobs are always skipped.
+- `hotfix-*`: package and image can run, but deploy jobs are always skipped.
 - `main` and `master`: only merge commits from `release-*` or `hotfix-*` can start a pipeline; package and image jobs can run, stable images are tagged from the source branch, and deploy jobs are skipped.
-- All other branches, including `develop`: skip the whole pipeline.
+- All other branches: skip the whole pipeline. No branch other than `develop` may deploy to K8S.
 
 When enabling `main`/`master` merge-triggered stable builds, derive the source branch from the merge commit title. This relies on GitLab's normal merge commit format such as `Merge branch 'release-1.0.0' into 'master'`. If the project uses squash merge, fast-forward merge, or custom merge commit titles, ask for the stable tag source convention instead of guessing.
 
@@ -144,14 +146,13 @@ case "$CI_COMMIT_BRANCH" in
 esac
 ```
 
-Deploy skip rule:
+Deploy rule: only `develop` may deploy to K8S. Every generated deploy job must use this rule shape, optionally followed by `rules.changes`:
 
 ```yaml
 rules:
-  - if: '$CI_COMMIT_BRANCH =~ /^(main|master)$/'
+  - if: '$CI_COMMIT_BRANCH != "develop"'
     when: never
-  - if: '$CI_COMMIT_BRANCH =~ /^hotfix-.*$/'
-    when: never
+  - if: '$CI_COMMIT_BRANCH == "develop"'
   - changes:
       - <service-path>/**/*
 ```
@@ -215,7 +216,7 @@ Only use Docker-in-Docker when the project already uses it or the user requests 
 
 For Java Maven services, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`. Generate this deploy job by default when using the Java Maven + Kaniko flow unless the user explicitly says not to deploy, but always skip it for `main`/`master` merge-triggered stable builds.
 
-For Vue/Node.js static frontends in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same branch behavior as Java: deploy from `release-*`; skip deploy on `hotfix-*`; skip `main`/`master` merge-triggered stable builds by default; skip other branches, including `develop`, when the environment branch allow-list is used. Generate this deploy job by default when using the Vue/Node.js static frontend + Kaniko flow unless the user explicitly says not to deploy.
+For Vue/Node.js static frontends in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same branch behavior as Java: deploy only from `develop`; skip deploy on `release-*`, `hotfix-*`, and `main`/`master` merge-triggered stable builds; skip other branches when the environment branch allow-list is used. Generate this deploy job by default when using the Vue/Node.js static frontend + Kaniko flow unless the user explicitly says not to deploy.
 
 For .NET services in this environment, deployment normally means updating the Kubernetes Deployment image after the image job produces `IMAGE_URL`, using the same `kubectl set image` pattern. Generate this deploy job by default when using the .NET publish + Kaniko flow unless the user explicitly says not to deploy, but always skip it for `main`/`master` merge-triggered stable builds.
 
@@ -263,7 +264,7 @@ For WeCom/Enterprise WeChat webhook notification, use the CI/CD variable `WECHAT
 
 Prefer an independent `notify` stage/job over adding notification logic to the kubectl deploy job, because the kubectl image may not include curl or other HTTP clients. Use a curl image available in the target environment. If no curl image is available, use another image that includes curl. Do not require Python or the third-party `requests` package for basic WeCom notification.
 
-When notification is requested, add `notify` after `deploy` in `stages`, or after `image` when the generated pipeline is a `main`/`master` merge-triggered stable build without deploy, and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `release-*`, image build success/failure notification for `hotfix-*` because hotfix branches build images but skip deployment by default, and stable image build success/failure notification for `main`/`master` merge-triggered stable builds when that policy is enabled. On `release-*`, a package, image, or deploy failure should trigger the deploy failure notification. On `hotfix-*`, a package or image failure should trigger the image build failure notification. On `main`/`master` stable builds, package or image failures should trigger the stable build failure notification. Message style should match:
+When notification is requested, add `notify` after `deploy` in `stages`, or after `image` when the generated pipeline is a `main`/`master` merge-triggered stable build without deploy, and generate notification jobs as needed. For this repository's branch policy, generate deploy publish notification for `develop`, image build success/failure notification for `release-*` and `hotfix-*`, and stable image build success/failure notification for `main`/`master` merge-triggered stable builds when that policy is enabled. On `develop`, a package, image, or deploy failure should trigger the deploy failure notification. On `release-*` and `hotfix-*`, a package or image failure should trigger the image build failure notification. On `main`/`master` stable builds, package or image failures should trigger the stable build failure notification. Message style should match:
 
 - Deploy success: `开发环境发布通知\n<project-or-module>:<tag>发布成功`
 - Deploy failure: `开发环境发布通知\n<project>:<branch>发布失败`
@@ -293,7 +294,7 @@ notify:image:success:
     - job: image
       artifacts: true
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^hotfix-.*$/'
+    - if: '$CI_COMMIT_BRANCH =~ /^(release-.*|hotfix-.*)$/'
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
     - |
@@ -312,7 +313,7 @@ notify:image:failure:
     entrypoint: [""]
   cache: []
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^hotfix-.*$/'
+    - if: '$CI_COMMIT_BRANCH =~ /^(release-.*|hotfix-.*)$/'
       when: on_failure
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
@@ -337,7 +338,7 @@ notify:deploy:success:
     - job: image
       artifacts: true
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
       when: on_success
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
@@ -357,7 +358,7 @@ notify:deploy:failure:
     entrypoint: [""]
   cache: []
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^release-.*$/'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
       when: on_failure
   script:
     - ': "${WECHAT_WEBHOOK:?WECHAT_WEBHOOK is required}"'
@@ -377,7 +378,7 @@ If the target GitLab Runner cannot pull `image.server:8082/library/curlimages/cu
 
 Use this when the target is a Java Maven service in this environment, or when the user wants the same pattern as this repository:
 
-- Branch workflow: run pipelines automatically on `release-*` and `hotfix-*`; allow `main`/`master` only for merge commits from `release-*` or `hotfix-*`; skip every other branch, including `develop`.
+- Branch workflow: run pipelines automatically on `develop`, `release-*`, and `hotfix-*`; allow `main`/`master` only for merge commits from `release-*` or `hotfix-*`; skip every other branch.
 - Stages: `package`, `image`, `deploy`; `main`/`master` stable builds use package and image only.
 - Optional notification stage: add `notify` only when the user asks for publish/deploy/image notification.
 - Normal flow: package the JAR, build/push the Docker image, then update the K8S Deployment image.
@@ -388,12 +389,12 @@ Use this when the target is a Java Maven service in this environment, or when th
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)` for branch pipelines; `stable-${SOURCE_BRANCH}_$(TZ=CST-8 date +%F-%H-%M-%S)` for `main`/`master` merge-triggered stable builds, for example `stable-release-1.0.0_2026-06-22-10-30-00`.
 - Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
 - Stable source branch: for `main`/`master` stable builds, parse `SOURCE_BRANCH` from `CI_COMMIT_TITLE` and fail if it is not `release-*` or `hotfix-*`.
-- Deploy: `kubectl set image` and `kubectl rollout status --timeout`, defaulting rollout wait time to `60s`. Deploy jobs must skip `main`/`master` merge-triggered stable builds.
+- Deploy: `kubectl set image` and `kubectl rollout status --timeout`, defaulting rollout wait time to `60s`. Deploy jobs must allow only `develop` and skip `release-*`, `hotfix-*`, and `main`/`master` merge-triggered stable builds.
 - Deploy image: `image.server:8082/library/bitnami/kubectl:1.28`.
 - Publish notification: optional WeCom notification via `WECHAT_WEBHOOK`, using independent curl notification jobs.
-- Hotfix image notification: when notification is requested and following this repository's branch policy, `hotfix-*` sends image build success notification after image build succeeds and image build failure notification when package or image fails because deploy is skipped.
-- Release policy: deploy jobs run on `release-*` by default.
-- Hotfix policy: deploy jobs skip `hotfix-*` by default.
+- Image notification: when notification is requested and following this repository's branch policy, `release-*` and `hotfix-*` send image build success notification after image build succeeds and image build failure notification when package or image fails because deploy is skipped.
+- Develop policy: deploy jobs run only on `develop` by default.
+- Release/hotfix policy: deploy jobs skip `release-*` and `hotfix-*` by default.
 
 For each deployable module, generate:
 
@@ -402,8 +403,8 @@ For each deployable module, generate:
 - `deploy:<short-name>` needing `image:<short-name>` dotenv artifacts
 - `notify:image:<short-name>:success` needing `image:<short-name>` dotenv artifacts for `hotfix-*` image build success notification when notification is requested
 - `notify:image:<short-name>:failure` for `hotfix-*` image build failure notification when notification is requested
-- `notify:deploy:<short-name>:success` needing `deploy:<short-name>` and `image:<short-name>` dotenv artifacts for `release-*` deploy success notification when notification is requested
-- `notify:deploy:<short-name>:failure` for `release-*` deploy failure notification when notification is requested
+- `notify:deploy:<short-name>:success` needing `deploy:<short-name>` and `image:<short-name>` dotenv artifacts for `develop` deploy success notification when notification is requested
+- `notify:deploy:<short-name>:failure` for `develop` deploy failure notification when notification is requested
 
 Include `rules.changes` for root build files, wrapper files, Dockerfile, and the service path.
 
@@ -411,7 +412,7 @@ Include `rules.changes` for root build files, wrapper files, Dockerfile, and the
 
 Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or when the user wants the same frontend build/image pattern:
 
-- Branch workflow: run pipelines automatically on `release-*` and `hotfix-*`; allow `main`/`master` only for merge commits from `release-*` or `hotfix-*`; skip every other branch, including `develop`.
+- Branch workflow: run pipelines automatically on `develop`, `release-*`, and `hotfix-*`; allow `main`/`master` only for merge commits from `release-*` or `hotfix-*`; skip every other branch.
 - Stages: `package`, `image`, `deploy`; `main`/`master` stable builds use package and image only.
 - Normal flow: install Node dependencies, run the frontend build script, publish `dist/` as an artifact, then build/push the nginx image with Kaniko.
 - Node version: use a concrete project pin when present. For `package.json` `volta.node: "14.18.0"`, use `image.server:8082/library/node:14.18.0` or ask for the available internal Node 14 image if that exact image is not known. When project evidence requires a high Node.js version, such as Node 20+ from `engines.node`, `.nvmrc`, `.node-version`, Volta, Vite/Nuxt docs, or dependency requirements, use `image.server:8082/library/node:22.19.0` by default.
@@ -426,15 +427,15 @@ Use this when the target is a Vue frontend like `nledu-cloud-teaching-web`, or w
 - Image tag: `${CI_COMMIT_REF_NAME}_$(TZ=CST-8 date +%F-%H-%M-%S)` for branch pipelines; `stable-${SOURCE_BRANCH}_$(TZ=CST-8 date +%F-%H-%M-%S)` for `main`/`master` merge-triggered stable builds, for example `stable-release-1.0.0_2026-06-22-10-30-00`.
 - Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
 - Stable source branch: for `main`/`master` stable builds, parse `SOURCE_BRANCH` from `CI_COMMIT_TITLE` and fail if it is not `release-*` or `hotfix-*`.
-- Deploy: use the shared `kubectl set image` job on `release-*`; skip `hotfix-*` and `main`/`master` merge-triggered stable builds by default.
-- Release policy: deploy jobs run on `release-*` by default.
-- Hotfix policy: deploy jobs skip `hotfix-*` by default, so hotfix branches only package and build/push images.
+- Deploy: use the shared `kubectl set image` job only on `develop`; skip `release-*`, `hotfix-*`, and `main`/`master` merge-triggered stable builds by default.
+- Develop policy: deploy jobs run only on `develop` by default.
+- Release/hotfix policy: deploy jobs skip `release-*` and `hotfix-*` by default, so those branches only package and build/push images.
 
 For a single frontend app, generate:
 
 - `package:web`
 - `image:web` needing `package:web` artifacts
-- `deploy:web` needing `image:web` dotenv artifacts, with rules that skip `hotfix-*` and allow `release-*`
+- `deploy:web` needing `image:web` dotenv artifacts, with rules that allow only `develop`
 - matching notification jobs only when notification is requested
 
 Include `rules.changes` for `package.json`, lockfiles, Vue/Vite/Nuxt config files, Dockerfile, nginx config, public assets, and `src/**/*`.
@@ -444,9 +445,9 @@ Include `rules.changes` for `package.json`, lockfiles, Vue/Vite/Nuxt config file
 Use this when the target is a .NET service like `nle-iot-cloud-service`, or when the user wants the same .NET publish/image/deploy pattern:
 
 - Project signals: `.sln`, one or more `.csproj` files, `NuGet.config`, and a deployable web entry project such as `*.Web.Entry/*.csproj`.
-- Branch workflow: use the user's branch policy. When reusing this environment's default policy, run pipelines automatically on `release-*` and `hotfix-*`; allow `main`/`master` only for merge commits from `release-*` or `hotfix-*`; skip every other branch, including `develop`.
-- Release policy: `release-*` runs package, image, and deploy jobs.
-- Hotfix policy: `hotfix-*` runs package and image jobs, but deploy jobs are skipped by default.
+- Branch workflow: use the user's branch policy. When reusing this environment's default policy, run pipelines automatically on `develop`, `release-*`, and `hotfix-*`; allow `main`/`master` only for merge commits from `release-*` or `hotfix-*`; skip every other branch.
+- Develop policy: `develop` runs package, image, and deploy jobs.
+- Release/hotfix policy: `release-*` and `hotfix-*` run package and image jobs, but deploy jobs are skipped by default.
 - Stages: `package`, `image`, `deploy`; `main`/`master` stable builds use package and image only; add `notify` only when the user asks for publish/deploy/image notification.
 - Normal flow: `dotnet restore`, `dotnet publish` to `$CI_PROJECT_DIR/publish`, build/push the Docker image from the root Dockerfile, then update the K8S Deployment image.
 - SDK image: use `image.server:8082/library/dotnet_sdk:8.0` for .NET 8 projects. If `global.json`, `TargetFramework`, or Dockerfile evidence points to another .NET version, use the matching internal SDK image or ask for the available image.
@@ -461,7 +462,7 @@ Use this when the target is a .NET service like `nle-iot-cloud-service`, or when
 - Image dotenv artifact: write both `IMAGE_URL=...` and `IMAGE_TAG=...` to `build.env`; notifications display `IMAGE_TAG`, while deploy uses `IMAGE_URL`.
 - Stable source branch: for `main`/`master` stable builds, parse `SOURCE_BRANCH` from `CI_COMMIT_TITLE` and fail if it is not `release-*` or `hotfix-*`.
 - Deploy: use the shared `kubectl set image` job and `kubectl rollout status --timeout`, defaulting rollout wait time to `60s`. Deploy jobs must skip `main`/`master` merge-triggered stable builds.
-- Optional notification: when requested, add independent curl jobs like this skill's notification pattern. A simple single-service .NET pipeline can use `notify:success` after deploy and `notify:failure` with `when: on_failure`; if using the release/hotfix branch split, keep hotfix image notifications and release deploy notifications consistent with Java/Vue.
+- Optional notification: when requested, add independent curl jobs like this skill's notification pattern. A simple single-service .NET pipeline can use `notify:success` after deploy and `notify:failure` with `when: on_failure`; if using the release/hotfix branch split, keep release/hotfix image notifications and develop deploy notifications consistent with Java/Vue.
 
 For a single .NET service, generate:
 
@@ -503,6 +504,7 @@ Before finishing, verify:
 - `needs` references use exact job names.
 - Artifacts or dotenv files are produced before downstream jobs consume them.
 - If `main`/`master` merge-triggered stable builds are enabled, workflow rules allow only merge commits from `release-*` or `hotfix-*`, jobs parse `SOURCE_BRANCH` from `CI_COMMIT_TITLE`, image tags are `stable-${SOURCE_BRANCH}_${timestamp}`, and no K8S deploy job runs for `main`/`master`.
+- Every generated K8S deploy job must allow only `develop`; `release-*`, `hotfix-*`, `main`, `master`, and all other branches must skip deployment.
 - `artifacts.expire_in` is omitted unless the user explicitly requested a concrete retention period.
 - Required variables fail fast with shell parameter checks when used in scripts.
 - Cache keys are scoped to `$CI_PROJECT_NAME`, for example `$CI_PROJECT_NAME-maven` or `$CI_PROJECT_NAME-web-npm`.

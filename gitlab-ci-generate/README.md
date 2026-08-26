@@ -2,7 +2,7 @@
 
 这是一个用于生成 `.gitlab-ci.yml` 的通用 opencode skill。
 
-它的目标不是固定套用某一种 CI 模板，而是先分析目标项目结构，再根据项目的语言、构建工具、Dockerfile、部署方式和分支策略，生成可用的 GitLab CI 配置。对于当前环境的 Java Maven 服务，默认正常流程是构建 JAR 包、构建镜像、然后更新 K8S 中的镜像信息。对于 Vue/Node.js 静态前端，默认正常流程是安装依赖、构建 `dist/`、构建 nginx 静态资源镜像，然后在 `release-*` 分支更新 K8S 镜像；对于 .NET 8 服务，默认正常流程是 `dotnet restore`、`dotnet publish` 到 `publish/`、构建运行时镜像、然后更新 K8S 镜像。`hotfix-*` 分支只构建镜像不部署，`develop` 分支默认不触发流水线。
+它的目标不是固定套用某一种 CI 模板，而是先分析目标项目结构，再根据项目的语言、构建工具、Dockerfile、部署方式和分支策略，生成可用的 GitLab CI 配置。对于当前环境的 Java Maven 服务，默认正常流程是构建 JAR 包、构建镜像、然后仅在 `develop` 分支更新 K8S 中的镜像信息。对于 Vue/Node.js 静态前端，默认正常流程是安装依赖、构建 `dist/`、构建 nginx 静态资源镜像，然后仅在 `develop` 分支更新 K8S 镜像；对于 .NET 8 服务，默认正常流程是 `dotnet restore`、`dotnet publish` 到 `publish/`、构建运行时镜像、然后仅在 `develop` 分支更新 K8S 镜像。`release-*` 和 `hotfix-*` 分支只构建镜像不部署，只有 `develop` 分支允许发布到 K8S。
 
 
 ## 适用场景
@@ -24,7 +24,7 @@
 ```
 
 ```text
-帮我给这个 Vue 前端项目生成 GitLab CI，build 后用 Kaniko 构建 nginx 镜像，release 发布 K8S，hotfix 只构建镜像，develop 不触发流水线
+帮我给这个 Vue 前端项目生成 GitLab CI，build 后用 Kaniko 构建 nginx 镜像，develop 发布 K8S，release 和 hotfix 只构建镜像
 ```
 
 ```text
@@ -106,9 +106,9 @@ deploy:<service>
 如果复用当前仓库分支策略：
 
 - 仅 `release-*` 和 `hotfix-*` 分支启动流水线
-- `release-*` 分支允许打包、构建镜像、部署
-- `hotfix-*` 分支只打包和构建镜像，默认跳过部署
-- `develop` 分支默认不触发流水线
+- `develop` 分支允许打包、构建镜像、部署到 K8S
+- `release-*` 分支只打包和构建镜像，禁止部署
+- `hotfix-*` 分支只打包和构建镜像，禁止部署
 
 ### Vue/Node.js 静态前端
 
@@ -137,9 +137,9 @@ package:web -> image:web -> deploy:web
 分支策略与 Java 保持一致：
 
 - 仅 `release-*` 和 `hotfix-*` 分支启动流水线
-- `release-*` 分支允许构建静态资源、构建镜像、部署
-- `hotfix-*` 分支只构建静态资源和镜像，默认跳过部署
-- 其他分支包括 `develop` 跳过整个流水线
+- `develop` 分支允许构建静态资源、构建镜像、部署
+- `release-*` 和 `hotfix-*` 分支只构建静态资源和镜像，禁止部署
+- 其他分支跳过整个流水线
 
 Node 构建镜像选择规则：
 
@@ -196,18 +196,18 @@ dotnet restore/publish 到 publish/ -> 构建并推送运行时镜像 -> kubectl
 - image job 使用 Kaniko，默认 `--context "$CI_PROJECT_DIR"` 和 `--dockerfile "$CI_PROJECT_DIR/Dockerfile"`
 - 镜像 tag 默认使用 `${CI_COMMIT_REF_SLUG}_$(TZ=CST-8 date +%F-%H-%M-%S)`，并把 `IMAGE_URL`、`IMAGE_TAG` 写入 `build.env`
 - Dockerfile 应保留实际运行时入口，例如 `ENTRYPOINT ["/app/NIFCWeb.Web.Entry","--urls","http://*:5000"]`，但项目名、端口、基础镜像要按目标项目调整
-- 如果复用当前环境分支策略，.NET 流水线也只允许 `release-*` 和 `hotfix-*` 分支触发
-- `release-*` 分支执行 package、image、deploy
-- `hotfix-*` 分支只执行 package、image，默认跳过 deploy
-- `develop`、`main`、`master` 和其他分支默认不触发流水线
+- 如果复用当前环境分支策略，.NET 流水线允许 `develop`、`release-*` 和 `hotfix-*` 分支触发
+- `develop` 分支执行 package、image、deploy
+- `release-*` 和 `hotfix-*` 分支只执行 package、image，禁止 deploy
+- `main`、`master` 和其他分支默认不触发流水线（稳定镜像构建规则除外）
 
 ## 生成原则
 
 - 不盲目套模板。
 - 不给不需要部署的项目添加 deploy job。
 - Java Maven 服务的正常流程包含 deploy job，用于更新 K8S 中的镜像信息；只有用户明确说 CI-only、不部署或项目证据不支持部署时才省略。
-- Vue/Node.js 静态前端的正常流程包含 deploy job，deploy 在 `release-*` 分支执行；`hotfix-*` 分支只构建镜像，`develop` 分支不触发流水线。
-- .NET 服务的正常流程包含 deploy job，用于将 `publish/` 构建出的运行时镜像发布到 K8S；复用当前环境分支策略时，`release-*` 分支执行部署，`hotfix-*` 分支只构建镜像不部署，其他分支不触发；只有用户明确说 CI-only、不部署或项目证据不支持部署时才省略 deploy。
+- Vue/Node.js 静态前端的正常流程包含 deploy job，deploy 只在 `develop` 分支执行；`release-*` 和 `hotfix-*` 分支只构建镜像。
+- .NET 服务的正常流程包含 deploy job，用于将 `publish/` 构建出的运行时镜像发布到 K8S；复用当前环境分支策略时，只有 `develop` 分支执行部署，`release-*` 和 `hotfix-*` 分支只构建镜像，其他分支不触发；只有用户明确说 CI-only、不部署或项目证据不支持部署时才省略 deploy。
 - 不给没有 Dockerfile 的项目强行添加 image job。
 - 单模块 Java 项目不使用多模块的 `-pl $MODULE_NAME -am`。
 - Java Maven 项目先检测 JDK 版本，再选择对应内网 Maven 镜像；如果无法判断 JDK 8 或 JDK 17，应先询问确认。
@@ -228,10 +228,10 @@ dotnet restore/publish 到 publish/ -> 构建并推送运行时镜像 -> kubectl
 - kubectl deploy job 使用内网镜像 `image.server:8082/library/bitnami/kubectl:1.28`。
 - kubectl deploy job 必须给 `rollout status` 设置显式超时，默认 `60s`，可通过 `KUBE_ROLLOUT_TIMEOUT` 覆盖。
 - 通知是可选能力，只有用户明确要求发布/部署/镜像通知时才生成通知 job。
-- `release-*` 分支发布成功后发送发布成功通知；`release-*` 分支 package、image 或 deploy 任一失败都会发送发布失败通知；`hotfix-*` 分支默认跳过部署，但镜像构建成功或失败都会发送镜像构建通知。
+- `develop` 分支发布成功后发送发布成功通知；`develop` 分支 package、image 或 deploy 任一失败都会发送发布失败通知；`release-*` 和 `hotfix-*` 分支禁止部署，但镜像构建成功或失败都会发送镜像构建通知。
 - 企业微信发布通知使用 GitLab CI/CD Variable `WECHAT_WEBHOOK` 保存 webhook URL，不在 `.gitlab-ci.yml` 中硬编码 webhook 地址或 key；text 消息 payload 默认带 `"mentioned_list":["${GITLAB_USER_LOGIN}"]`，通知触发流水线的用户。
 - 通知 job 默认独立放在 `notify` stage，使用 `curl` 发送 HTTP 请求，不依赖 Python 或第三方 `requests` 包。
-- 默认 workflow 只允许 `release-*` 和 `hotfix-*` 分支启动流水线，其他分支包括 `develop` 都跳过。
+- 默认 workflow 允许 `develop`、`release-*` 和 `hotfix-*` 分支启动流水线，其他分支跳过；只有 `develop` 允许部署到 K8S。
 - 多模块项目使用 `rules.changes` 限制服务 job 的触发范围。
 - secrets 只引用 GitLab CI/CD Variables，不写入配置文件。
 - 尽量生成最小、可维护的 `.gitlab-ci.yml`。
@@ -252,18 +252,18 @@ dotnet restore/publish 到 publish/ -> 构建并推送运行时镜像 -> kubectl
 <项目或模块名>:<分支>发布失败
 ```
 
-在 `release-*` 分支，package、image 或 deploy 任一阶段失败都会触发发布失败通知。发布失败通知优先使用模块名，没有模块名时使用项目名，并使用分支名，例如 `tpsp-monorepo-client:release-1.0.0发布失败`，不使用镜像 tag 或 `IMAGE_URL`。
+在 `develop` 分支，package、image 或 deploy 任一阶段失败都会触发发布失败通知。发布失败通知优先使用模块名，没有模块名时使用项目名，并使用分支名，例如 `tpsp-monorepo-client:develop发布失败`，不使用镜像 tag 或 `IMAGE_URL`。
 
 发布成功和镜像构建通知展示镜像 tag，不展示完整 `IMAGE_URL`。例如应生成 `tpsp-monorepo-client-admin:release-1.8.0-mjsz_2026-05-21-14-11-55`，而不是 `nledu-cloud-operatation-analysis:image.server:8082/nledu-cloud/nledu-cloud-operatation-analysis:release-1.0.0_2026-05-21-06-10-42`。生成的 image job 会把 `IMAGE_URL` 和 `IMAGE_TAG` 都写入 `build.env`：deploy 使用 `IMAGE_URL`，通知展示 `IMAGE_TAG`。
 
-对于默认只构建镜像、不部署的 `hotfix-*` 分支，镜像构建成功后会发送：
+对于默认只构建镜像、不部署的 `release-*` 和 `hotfix-*` 分支，镜像构建成功后会发送：
 
 ```text
 镜像构建通知
 <项目或模块名>:<镜像 tag>构建成功
 ```
 
-如果 `hotfix-*` 分支 package 或 image 阶段失败，会发送：
+如果 `release-*` 或 `hotfix-*` 分支 package 或 image 阶段失败，会发送：
 
 ```text
 镜像构建通知

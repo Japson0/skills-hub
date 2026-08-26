@@ -10,13 +10,13 @@
     {
       "id": 2,
       "prompt": "这个是单模块 Java Maven 项目，想直接用 GitLab CI 完成打包、Kaniko 推镜像、kubectl 发布。帮我生成 .gitlab-ci.yml。",
-      "expected_output": "生成单模块 Java Maven pipeline，使用 Maven package、Kaniko image、kubectl deploy，不应使用多模块 -pl MODULE_NAME；workflow 仅允许 develop 和 release-* 分支启动流水线，其他分支都跳过；Maven 命令必须带 -s $MAVEN_SETTINGS_XML 并校验 MAVEN_SETTINGS_XML；Kaniko job 应使用 image.server:8082/library/kaniko-project/executor:v1.23.2-debug，executor 命令带 --insecure-pull --insecure；kubectl job 应使用 image.server:8082/library/bitnami/kubectl:1.28，需列出 registry、MAVEN_SETTINGS_XML 和 Kubernetes 变量。",
+      "expected_output": "生成单模块 Java Maven pipeline，使用 Maven package、Kaniko image、kubectl deploy，不应使用多模块 -pl MODULE_NAME；workflow 允许 develop 和 release-* 分支启动流水线，其他分支都跳过；只有 develop 分支允许 deploy 到 K8S，release-* 分支必须跳过 deploy；Maven 命令必须带 -s $MAVEN_SETTINGS_XML 并校验 MAVEN_SETTINGS_XML；Kaniko job 应使用 image.server:8082/library/kaniko-project/executor:v1.23.2-debug，executor 命令带 --insecure-pull --insecure；kubectl job 应使用 image.server:8082/library/bitnami/kubectl:1.28，需列出 registry、MAVEN_SETTINGS_XML 和 Kubernetes 变量。",
       "files": []
     },
     {
       "id": 3,
       "prompt": "参考当前仓库的 GitLab CI 模板，给另一个 Maven 多模块项目生成 manager 和 chat 两个服务的 CI。release 分支只构建镜像不发布。",
-      "expected_output": "复用当前仓库 Java Maven + Kaniko + kubectl 模板，生成 package/image/deploy 三类服务 job，workflow 仅允许 develop 和 release-* 分支启动流水线，Maven 命令必须带 -s $MAVEN_SETTINGS_XML，Kaniko job 使用 image.server:8082/library/kaniko-project/executor:v1.23.2-debug 且 executor 命令带 --insecure-pull --insecure，deploy jobs 在 release-* 分支 when: never，kubectl job 使用 image.server:8082/library/bitnami/kubectl:1.28。",
+      "expected_output": "复用当前仓库 Java Maven + Kaniko + kubectl 模板，生成 package/image/deploy 三类服务 job，workflow 允许 develop 和 release-* 分支启动流水线，Maven 命令必须带 -s $MAVEN_SETTINGS_XML，Kaniko job 使用 image.server:8082/library/kaniko-project/executor:v1.23.2-debug 且 executor 命令带 --insecure-pull --insecure，deploy jobs 只允许 develop 分支运行并在 release-* 分支 when: never，kubectl job 使用 image.server:8082/library/bitnami/kubectl:1.28。",
       "files": []
     },
     {
@@ -29,6 +29,12 @@
       "id": 5,
       "prompt": "这个 Maven 项目的 pom.xml 里配置了 <maven.compiler.source>1.8</maven.compiler.source>，有 build/Dockerfile，帮我生成 GitLab CI。",
       "expected_output": "识别为 JDK 8 Maven 项目，Maven package/test job 应使用 image.server:8082/library/maven:3.8.6-openjdk-8；Maven 命令必须带 -s $MAVEN_SETTINGS_XML；默认正常流程应构建 JAR、构建镜像、再更新 K8S 中的镜像信息。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "帮我生成包含企业微信通知的 GitLab CI。要求 develop 分支发布到 K8S，release-* 和 hotfix-* 只构建镜像，任何其他分支都不能发布到 K8S。",
+      "expected_output": "生成独立 notify stage 和企业微信通知 job，webhook 使用 WECHAT_WEBHOOK 且 payload 包含 GITLAB_USER_LOGIN；deploy job 的规则只允许 develop，release-*、hotfix-*、main/master 和其他分支均禁止 K8S 部署；release-* 和 hotfix-* 可以发送镜像构建成功/失败通知，develop 可以发送发布成功/失败通知。",
       "files": []
     }
   ]
