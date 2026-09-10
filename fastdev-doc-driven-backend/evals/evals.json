@@ -54,6 +54,24 @@
       "prompt": "新增一个业务校验：当用户不是租户管理员时抛出业务异常，提示“当前用户没有租户管理权限”，并补齐对应的国际化资源。",
       "expected_output": "使用项目已有的 BusinessException；构造参数是 i18n key 而非中文文案；先检索现有 i18n 资源是否已有同义 key，有则复用，没有再在对应 messages 文件补中英文 key，且不为该模块单独造同义 key。若工程中不存在 BusinessException，不得自动创建公共异常类，应向用户说明并确认。",
       "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "给字典更新方法增加简单审计日志。操作内容需要通过 SpEL 读取请求对象的 name，业务编码使用 dictionary.update；只记录操作信息，不记录修改前后的对象。",
+      "expected_output": "在对应业务方法上添加 @AuditLog，value 使用引用真实方法参数及其 name 属性的 SpEL 表达式，businessCode 设置为 dictionary.update；保持原有方法业务返回类型，不为简单记录改成 AuditObj，也不手工保存审计日志。应先确认目标方法真实参数名，不能编造 request、req 等 SpEL 变量。",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "更新字典时记录完整审计变更：保存更新前和更新后的 DictionaryDTO，操作类型为更新，被操作租户 ID 从业务对象获取，审计内容固定为“更新字典”，接口最终仍向调用方返回更新后的 DTO。项目接口目前使用统一返回包装，请按现有审计框架处理。",
+      "expected_output": "使用 @AuditLog 标记方法并返回 AuditObj<DictionaryDTO, DictionaryDTO>；operatorType 使用目标工程已存在的 OperatorType.UPDATE，source 是修改前的独立快照，target 是修改后的对象，targetTenantId 来自真实业务对象，operatorValue 设置为“更新字典”，result 设置为最终返回给调用方的更新后 DTO。明确 operatorValue 非空时覆盖 @AuditLog.value；先检查审计切面对 AuditObj.result 和统一返回包装的解包方式，不得无依据生成 RestResult<AuditObj<...>>，也不得硬编码租户 ID、臆造包名或另写审计持久化逻辑。",
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "给一个租户启用接口增加审计。除了操作说明，还要记录被操作的 tenantId，但不需要保存对象变更前后的内容。",
+      "expected_output": "使用 @AuditLog 标记方法，并因为需要记录被操作租户而采用 AuditObj 模式返回；targetTenantId 从真实业务参数或对象获取，不硬编码。没有变更内容需求时不应强制构造 source 和 target；result 按原接口契约设置。不得只写 @AuditLog 后丢失目标租户信息，也不得手工持久化审计日志。",
+      "files": []
     }
   ]
 }

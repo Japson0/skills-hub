@@ -18,6 +18,7 @@
 - 从零初始化 FastDev/Spring Cloud 项目的 Maven archetype 流程
 - `@DubboService` Dubbo 暴露
 - `UserContext` 用户、角色、租户、组织与系统用户上下文
+- `@AuditLog` 简单审计与 `AuditObj` 详细审计
 
 ## Files
 
@@ -33,6 +34,7 @@
 - `references/naming.md`：表名转类名、前缀裁剪、包路径、RESTful 命名
 - `references/validation.md`：参数校验、枚举、加密、逻辑删除，以及 i18n key 选择与合并原则的唯一权威来源
 - `references/user-context.md`：当前用户、角色、租户、组织、系统用户与登录态判断
+- `references/audit-log.md`：`@AuditLog`、SpEL 操作信息，以及 `AuditObj` 被操作租户、操作类型、变更内容和返回结果规则
 
 ## 场景依赖矩阵
 
@@ -42,6 +44,7 @@
 - 业务异常与返回包装：`base-classes`，按需追加 `validation`
 - 用户/租户/组织：`user-context` + `base-classes`，按需追加 `validation`
 - 校验/枚举/加密/逻辑删除/i18n：`validation`，按需追加 `crud` + `base-classes`
+- 简单审计/详细审计：`audit-log`，按需追加 `crud` + `base-classes` + `user-context`
 - 命名/包路径：`naming`，按需追加 `crud` + `base-classes`
 - 从零创建项目：`project-init`，初始化后按业务继续加载上述文件
 

@@ -1,6 +1,6 @@
 ---
 name: fastdev-doc-driven-backend
-description: Use this skill whenever the user wants to implement, scaffold, or plan a backend feature from development documentation in a FastDev-style Spring project. Trigger whenever the request involves reading docs, table structures, interface specs, or existing sample modules and then generating code that should match established patterns such as Controller, Service, Mapper/XML, Entity, DTO, Query, BaseController4DTO, BaseService4DTO, custom pagination, QueryField-based querying, validation annotations, encryption, i18n, RestResult, BusinessException, or UserContext usage. Use it even if the user only says things like "根据开发文档开发", "参考样例生成", "按表结构生成CRUD", "补一个分页查询", or "照着现有工程写" without explicitly asking for a skill.
+description: Use this skill whenever the user wants to implement, scaffold, or plan a backend feature from development documentation in a FastDev-style Spring project. Trigger whenever the request involves reading docs, table structures, interface specs, or existing sample modules and then generating code that should match established patterns such as Controller, Service, Mapper/XML, Entity, DTO, Query, BaseController4DTO, BaseService4DTO, custom pagination, QueryField-based querying, validation annotations, encryption, i18n, RestResult, BusinessException, UserContext, AuditLog, or AuditObj usage. Use it even if the user only says things like "根据开发文档开发", "参考样例生成", "按表结构生成CRUD", "补一个分页查询", "增加审计日志", or "照着现有工程写" without explicitly asking for a skill.
 ---
 
 # FastDev Doc-Driven Backend
@@ -25,6 +25,8 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
   适用于参数校验、自定义 validation 注解、枚举生成规则、逻辑删除、i18n 文案规则
 - `references/user-context.md`
   适用于读取当前用户、角色、租户、组织、手机号验证状态，以及处理系统用户和登录态判断
+- `references/audit-log.md`
+  适用于通过 `@AuditLog` 记录简单审计信息，或通过 `AuditObj` 记录被操作租户、操作类型、变更内容等详细审计信息
 
 ## 适用场景
 
@@ -37,6 +39,7 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 - 根据开发规范文档，补齐 Controller、Service、Mapper、XML、Entity、DTO、Query
 - 根据字段说明实现分页查询、条件查询、字段加密
 - 根据已有 Dubbo API 或内部接口约定生成服务实现
+- 根据业务要求为方法增加简单审计日志或包含租户、操作类型、变更内容的详细审计
 - 根据开发文档先产出任务拆解或实施方案，再决定是否写代码
 
 如果只是泛泛地讨论方案，没有实际文档，也没有要求遵循现有工程风格，就不要使用这个 skill。
@@ -57,7 +60,7 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
    - 数据表或实体字段
    - 查询条件和分页要求
    - 是否需要 Dubbo 暴露
-   - 是否涉及国际化、脱敏、加密、业务异常
+   - 是否涉及国际化、脱敏、加密、业务异常、审计日志
    - 验收条件
 6. 区分清楚：
    - 文档明确写出的事实
@@ -73,7 +76,7 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 - 能复用已有模式就不要重复发明辅助类。
 - 文档没写清楚时，不要凭空虚构字段、错误码、业务规则。
 - 如果文档和样例冲突，先指出冲突，再按用户意图决定跟文档还是跟现有代码。
-- reference 中的基础类方法、HTTP 动词、`UserContext` 行为是默认基线，套用前先检查目标工程源码或相邻样例；存在差异时以目标工程实际实现为准。
+- reference 中的基础类方法、HTTP 动词、`UserContext` 行为和审计 API 是默认基线，套用前先检查目标工程源码或相邻样例；存在差异时以目标工程实际实现为准。
 
 ## 按场景读取
 
@@ -87,6 +90,7 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 | 业务异常与返回包装 | `references/base-classes.md` | 涉及 i18n key 选择时追加 `references/validation.md` |
 | 用户、角色、租户、组织、登录态 | `references/user-context.md`、`references/base-classes.md` | 涉及异常或 i18n 时追加 `references/validation.md` |
 | 参数校验、枚举、加密、逻辑删除、i18n 文案 | `references/validation.md` | 涉及实体或 Controller 生成时追加 `references/crud.md`、`references/base-classes.md` |
+| 简单审计、详细审计 | `references/audit-log.md` | 涉及 CRUD 或租户上下文时追加 `references/crud.md`、`references/base-classes.md`、`references/user-context.md` |
 | 类名推导、包路径、RESTful 命名 | `references/naming.md` | 涉及 CRUD 或基础类复用时追加 `references/crud.md`、`references/base-classes.md` |
 | 从零创建项目或初始化基础工程 | `references/project-init.md` | 初始化完成后再按实际业务场景加载上面对应文件 |
 
@@ -117,6 +121,7 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 - 实体可能继承基础实体类，如 `BaseEntity`
 - 敏感字段可使用 `@Encrypt`、`@WebSecuritySerialize`
 - 业务异常通过 `BusinessException` 抛出
+- 简单审计信息只通过 `@AuditLog` 标记；需要记录被操作租户、操作类型、变更内容等详细信息时返回 `AuditObj`
 - 可能需要用 `@DubboService` 暴露接口能力
 
 ## 建议的落地顺序
@@ -149,6 +154,8 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 - 哪些字段需要参数校验、校验分组是什么
 - 是否有国际化错误提示
 - 是否有统一异常约定
+- 是否需要记录审计日志，以及只记录简单操作信息还是记录被操作租户、操作类型、变更内容等详细信息
+- 审计业务编码、操作类型、被操作租户和最终业务返回值是否明确
 - 是否要兼容已有 API 或 Dubbo 接口
 - 是否依赖当前用户、租户或组织上下文，入口是否保证已经登录
 
@@ -226,13 +233,15 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 - `这个模块的 Service 直接继承 BaseService4DTO，基础增删改查和基础分页不要重复定义，只补一个带联表条件的自定义分页查询`
 - `根据表 agi_agent_charging 生成相关类，命名要按团队规范处理，尽量去掉统一前缀后再生成类名，同时包路径要直接沿用当前工程风格`
 - `新增一个只有租户管理员能调用的接口，从 UserContext 获取 tenantId 和 userId，并兼容未登录场景`
+- `给这个更新方法增加审计日志，value 使用请求参数的 SpEL 表达式，businessCode 使用字典更新编码`
+- `更新字典时记录修改前后的完整内容，通过 AuditObj 返回源值、目标值、操作类型和业务结果`
 
 ## 缺失信息处理
 
 如果文档不完整：
 
 - 对于可以从样例稳定推断出来的部分，直接沿用既有模式。
-- 对于会影响接口契约、数据库字段、加密算法、RPC 暴露方式的部分，先确认再写。
+- 对于会影响接口契约、数据库字段、加密算法、RPC 暴露方式或审计返回载体的部分，先确认再写。
 - 只问最关键的一个问题，不要连环追问。
 
 ## 质量标准
