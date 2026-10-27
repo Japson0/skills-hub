@@ -72,6 +72,24 @@
       "prompt": "给一个租户启用接口增加审计。除了操作说明，还要记录被操作的 tenantId，但不需要保存对象变更前后的内容。",
       "expected_output": "使用 @AuditLog 标记方法，并因为需要记录被操作租户而采用 AuditObj 模式返回；targetTenantId 从真实业务参数或对象获取，不硬编码。没有变更内容需求时不应强制构造 source 和 target；result 按原接口契约设置。不得只写 @AuditLog 后丢失目标租户信息，也不得手工持久化审计日志。",
       "files": []
+    },
+    {
+      "id": 13,
+      "prompt": "FastDev Java 8 项目要做报表后台生成：提交后返回任务编号，任务需要数据库落库，进程重启后继续处理，失败重试，用户只能查询自己租户的任务。请按现有组件给出接入方案。",
+      "expected_output": "读取 async-task.md，优先引用 net.github.fast:spring-async-task-ctx，版本跟目标工程匹配；选择 store=jdbc，说明真实 DDL、DataSource、稳定命名空间；实现 Spring Bean TaskHandler，注入 TaskEngine 并使用 submit(handler, tag, payload)，不新建线程池或自制任务表引擎。说明幂等、事务投递、租户归属鉴权和租约边界，不生成虚拟线程或 Java 9+ API，不声称恰好一次或已有续租。",
+      "files": []
+    },
+    {
+      "id": 14,
+      "prompt": "FastDev 的异步任务准备放 Redis，异常时我直接 return TaskResult.failure() 就会自动重试吧？任务可能跑半小时，业务事务提交后再投递是不是就绝不会丢？请帮我核对接入风险。",
+      "expected_output": "核对实际版本：默认引擎正常返回包括 failure 仍写 SUCCESS，异常才触发重试；指出 Redis 持久化/TTL/出队原子性及 nextRunTime 退避限制需验证；半小时任务需评估租约、幂等和缺失的续租/执行凭证，不虚构现成 API；afterCommit 仍有漏投窗口，严格可靠要求需同事务任务落库或 outbox/补偿。",
+      "files": []
+    },
+    {
+      "id": 15,
+      "prompt": "按现有 FastDev 规范设计用户信息保存接口，只做同步数据库写入，不需要后台任务。请说明要用哪些组件，不用生成字段。",
+      "expected_output": "复用既有 Controller/Service/Mapper 与业务异常等规则，不因为涉及持久化就引入 spring-async-task-ctx，不额外生成 TaskHandler、任务表或任务调度配置。",
+      "files": []
     }
   ]
 }

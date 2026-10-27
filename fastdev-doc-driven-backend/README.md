@@ -19,6 +19,8 @@
 - `@DubboService` Dubbo 暴露
 - `UserContext` 用户、角色、租户、组织与系统用户上下文
 - `@AuditLog` 简单审计与 `AuditObj` 详细审计
+- 系统当前时间统一通过 `cn.hutool.core.date.SystemClock.now()` 获取毫秒时间戳；日期时间对象据此转换，单调耗时测量仍使用 `System.nanoTime()`
+- `spring-async-task-ctx` 持久化异步任务、Handler 路由、状态查询、重试和恢复的接入规则
 
 ## Files
 
@@ -38,6 +40,8 @@
 
 ## 场景依赖矩阵
 
+- `references/async-task.md`：持久化异步任务的依赖、JDBC/Redis 配置、Handler/提交/查询示例、事务与幂等及可靠性边界
+
 不同任务通常需要组合读取多个 reference，详见 `SKILL.md` 的“按场景读取”。简表：
 
 - 单表 CRUD：`crud` + `base-classes` + `naming`，按需追加 `validation`
@@ -45,6 +49,7 @@
 - 用户/租户/组织：`user-context` + `base-classes`，按需追加 `validation`
 - 校验/枚举/加密/逻辑删除/i18n：`validation`，按需追加 `crud` + `base-classes`
 - 简单审计/详细审计：`audit-log`，按需追加 `crud` + `base-classes` + `user-context`
+- 持久化异步任务：`async-task`，按需追加 `user-context` + `base-classes` + `audit-log`；只有普通数据落库时不引入任务包
 - 命名/包路径：`naming`，按需追加 `crud` + `base-classes`
 - 从零创建项目：`project-init`，初始化后按业务继续加载上述文件
 
