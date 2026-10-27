@@ -19,7 +19,7 @@
 - `@DubboService` Dubbo 暴露
 - `UserContext` 用户、角色、租户、组织与系统用户上下文
 - `@AuditLog` 简单审计与 `AuditObj` 详细审计
-- 系统当前时间统一通过 `cn.hutool.core.date.SystemClock.now()` 获取毫秒时间戳；日期时间对象据此转换，单调耗时测量仍使用 `System.nanoTime()`
+- 当前时间获取、日期时间转换与单调耗时计量规范（按需读取 `references/time.md`）
 - `spring-async-task-ctx` 持久化异步任务、Handler 路由、状态查询、重试和恢复的接入规则
 
 ## Files
@@ -38,9 +38,10 @@
 - `references/user-context.md`：当前用户、角色、租户、组织、系统用户与登录态判断
 - `references/audit-log.md`：`@AuditLog`、SpEL 操作信息，以及 `AuditObj` 被操作租户、操作类型、变更内容和返回结果规则
 
-## 场景依赖矩阵
-
 - `references/async-task.md`：持久化异步任务的依赖、JDBC/Redis 配置、Handler/提交/查询示例、事务与幂等及可靠性边界
+- `references/time.md`：当前时间统一入口、日期时间转换、时区和单调计时的适用边界
+
+## 场景依赖矩阵
 
 不同任务通常需要组合读取多个 reference，详见 `SKILL.md` 的“按场景读取”。简表：
 
@@ -50,6 +51,7 @@
 - 校验/枚举/加密/逻辑删除/i18n：`validation`，按需追加 `crud` + `base-classes`
 - 简单审计/详细审计：`audit-log`，按需追加 `crud` + `base-classes` + `user-context`
 - 持久化异步任务：`async-task`，按需追加 `user-context` + `base-classes` + `audit-log`；只有普通数据落库时不引入任务包
+- 当前时间/耗时/超时：`time`，与实际业务所需的其他 reference 组合加载
 - 命名/包路径：`naming`，按需追加 `crud` + `base-classes`
 - 从零创建项目：`project-init`，初始化后按业务继续加载上述文件
 

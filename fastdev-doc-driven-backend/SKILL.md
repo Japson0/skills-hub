@@ -27,10 +27,12 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
   适用于读取当前用户、角色、租户、组织、手机号验证状态，以及处理系统用户和登录态判断
 - `references/audit-log.md`
   适用于通过 `@AuditLog` 记录简单审计信息，或通过 `AuditObj` 记录被操作租户、操作类型、变更内容等详细审计信息
+- `references/async-task.md`
+  适用于异步执行且需要任务持久化、重试或恢复的组件选型和接入
+- `references/time.md`
+  适用于获取当前时间、日期时间转换、耗时测量和本进程超时判断
 
 ## 适用场景
-
-持久化异步任务接入时读取 `references/async-task.md`：适用于后台执行并需要保存任务状态、失败重试、重启恢复或集群抢占的需求。
 
 当用户提出以下类型的需求时使用这个 skill：
 
@@ -64,8 +66,8 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
    - 查询条件和分页要求
    - 是否需要 Dubbo 暴露
    - 是否涉及国际化、脱敏、加密、业务异常、审计日志
-    - 是否需要异步执行及任务持久化、存储方式、任务状态查询、重试、幂等和事务提交时机
-    - 验收条件
+   - 是否需要异步执行及任务持久化
+   - 验收条件
 6. 区分清楚：
    - 文档明确写出的事实
    - 根据现有样例做出的合理推断
@@ -74,12 +76,10 @@ description: Use this skill whenever the user wants to implement, scaffold, or p
 
 ## 核心原则
 
-- 获取系统当前时间戳（毫秒）时，统一使用 `cn.hutool.core.date.SystemClock.now()`，不要使用 `System.currentTimeMillis()`。需要当前日期时间对象时，以该时间戳按目标类型和项目时区转换，不直接调用 `new Date()`、`Instant.now()`、`LocalDateTime.now()` 等另取当前时间。计时耗时、超时截止判断等需要单调时钟的场景仍使用 `System.nanoTime()`，不要替换为墙上时钟。沿用目标工程管理的 Hutool 依赖版本，不擅自升级。
 - 优先遵循文档和现有代码样例，不要擅自设计一套新分层。
 - 如果任务是初始化新项目，优先复用既有 archetype，不要手工从空目录拼装基础工程。
 - 优先复用项目里的基础能力，例如基础 Controller、基础 Service、分页封装、查询注解、统一返回。
 - 能复用已有模式就不要重复发明辅助类。
-- 同时需要异步执行和任务持久化/恢复能力时，引用 `net.github.fast:spring-async-task-ctx`，不要自行搭建 `@Async`/线程池加任务表的替代引擎。普通 CRUD 或允许丢失的短时异步操作不因此强制引入该包。
 - 文档没写清楚时，不要凭空虚构字段、错误码、业务规则。
 - 如果文档和样例冲突，先指出冲突，再按用户意图决定跟文档还是跟现有代码。
 - reference 中的基础类方法、HTTP 动词、`UserContext` 行为和审计 API 是默认基线，套用前先检查目标工程源码或相邻样例；存在差异时以目标工程实际实现为准。
@@ -98,6 +98,7 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 | 参数校验、枚举、加密、逻辑删除、i18n 文案 | `references/validation.md` | 涉及实体或 Controller 生成时追加 `references/crud.md`、`references/base-classes.md` |
 | 简单审计、详细审计 | `references/audit-log.md` | 涉及 CRUD 或租户上下文时追加 `references/crud.md`、`references/base-classes.md`、`references/user-context.md` |
 | 持久化异步任务、后台任务状态查询、重试与恢复 | `references/async-task.md` | 涉及用户/租户时追加 `references/user-context.md`，暴露接口时追加 `references/base-classes.md`，有审计要求时追加 `references/audit-log.md` |
+| 获取当前时间、日期时间转换、耗时测量、超时判断 | `references/time.md` | 与其他业务场景组合加载；仅处理历史时间或外部传入时间时不强制加载 |
 | 类名推导、包路径、RESTful 命名 | `references/naming.md` | 涉及 CRUD 或基础类复用时追加 `references/crud.md`、`references/base-classes.md` |
 | 从零创建项目或初始化基础工程 | `references/project-init.md` | 初始化完成后再按实际业务场景加载上面对应文件 |
 
@@ -165,7 +166,7 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 - 审计业务编码、操作类型、被操作租户和最终业务返回值是否明确
 - 是否要兼容已有 API 或 Dubbo 接口
 - 是否依赖当前用户、租户或组织上下文，入口是否保证已经登录
-- 异步任务是否需持久化；Handler 业务编码、payload、幂等键、事务投递时机、存储及租约是否明确
+- 异步任务是否需持久化，具体接入检查按 `references/async-task.md` 执行
 
 ## 输出模式
 
@@ -243,10 +244,9 @@ reference 之间不是孤立的，一次任务通常需要同时读取多个文�
 - `新增一个只有租户管理员能调用的接口，从 UserContext 获取 tenantId 和 userId，并兼容未登录场景`
 - `给这个更新方法增加审计日志，value 使用请求参数的 SpEL 表达式，businessCode 使用字典更新编码`
 - `更新字典时记录修改前后的完整内容，通过 AuditObj 返回源值、目标值、操作类型和业务结果`
+- `导出改成后台任务，任务要落库，重启后继续处理，并支持查询状态和失败重试`
 
 ## 缺失信息处理
-
-异步任务示例触发语句：`导出改成后台任务，任务要落库，重启后继续处理，并支持查询状态和失败重试`。按 `references/async-task.md` 接入，不另建任务引擎。
 
 如果文档不完整：
 

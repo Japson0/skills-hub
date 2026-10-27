@@ -11,8 +11,7 @@
 `TaskQuery`、`AsyncTaskProperties`、自动配置、实际 TaskStore 和建表脚本。
 以下签名是默认基线，版本差异以实际实现为准。不要把本机源码路径写进业务工程。
 
-Java 8/17 版本使用平台线程；JDK 25 版本可使用虚拟线程。根据目标工程 Java/Spring 版本选择对应发布版本，
-不要因为接入任务能力擅自升级 JDK。不要生成不存在的 `@EnableAsyncTask`、`submit(Runnable)`、
+依赖沿用目标工程统一管理的版本，不因接入任务能力擅自升级运行环境。不要生成不存在的 `@EnableAsyncTask`、`submit(Runnable)`、
 `TaskEngine.get(taskId)`、取消/续租 API 或框架未提供的任务 Controller。
 
 ## 依赖与配置
@@ -56,13 +55,13 @@ fastdev:
   AOF/RDB、复制、故障切换、过期和淘汰策略；不能等同于严格不丢失。核对元数据 TTL 与任务生命周期。
 - 命名空间使用稳定 `queue-name` 或 `spring.application.name`，不要依赖随机兜底，否则重启后可能无法消费旧任务。
   同服务集群共享命名空间和 Handler 路由；不同服务隔离。服务隔离不是租户鉴权。
-- 核对是否已包含调度背压修复：修复后 `workers` 限制单实例在途任务数，`pollers` 控制独立拉取并发；
-  Java 8/17 的 `workers` 也决定固定工作线程数。多实例并发会累加。旧版本可能尚未使用 `pollers`。
-- 修复后的轮询每轮有界批量拉取；释放执行许可不会立即唤醒下一轮，不承诺实时启动。
+- `workers` 控制单实例在途上限，`pollers` 控制独立拉取并发，多实例上限会累加。
+  套用前核对目标实现确实使用这些配置及抢占前背压，不直接从配置字段存在推断行为。
+- 轮询延迟和批量规则以实际实现为准；释放执行许可不等于立即启动下一任务。
 
 ## Handler 与提交示例
 
-下面类是示例业务命名，实际使用时沿用工程包路径和业务编码约定。示例兼容 Java 8。
+下面类是示例业务命名，实际使用时沿用工程包路径和业务编码约定。
 
 ```java
 import net.github.fastdev.asynctask.TaskContext;
