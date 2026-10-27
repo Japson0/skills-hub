@@ -1,0 +1,26 @@
+{
+  "debug": {
+    "rendererUrl": "http://localhost:5173",
+    "mcp": {
+      "playwright": "playwright"
+    },
+    "devCommands": {
+      "default": "npm run dev"
+    },
+    "auth": {
+      "strategy": "keycloak-password-grant",
+      "tokenScript": "node scripts/debug-get-token.mjs",
+      "checkScript": "node scripts/debug-get-token.mjs --check",
+      "sessionCache": ".cursor/debug-session.json",
+      "storageState": ".cursor/debug-auth.json",
+      "credentials": "ask-once-per-conversation",
+      "localStorageKeys": {
+        "accessToken": "cloud-token",
+        "refreshToken": "_kc_refresh"
+      },
+      "postAuthWaitMs": 4000,
+      "loginPageHosts": [],
+      "forbiddenInEvidence": ["password", "access_token", "refresh_token"]
+    }
+  }
+}
